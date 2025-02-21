@@ -1,0 +1,9 @@
+numpy
+pandas
+requests
+python-binance
+pybit
+scikit-learn
+torch
+torchvision
+matplotlib
