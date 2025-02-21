@@ -2,7 +2,7 @@ numpy
 pandas
 requests
 python-binance
-pybit
+pybit>=2.0.0
 scikit-learn
 torch
 torchvision
