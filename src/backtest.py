@@ -6,99 +6,75 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
 def run_backtest(df, levels=None, initial_capital=10000.0):
-    """
-    Упрощённый бэктест, где:
-      - df должен иметь столбец 'signal' (1 => Buy, -1 => Sell, 0 => нет позиции).
-      - levels можно передать для информации, не обязательно.
-    Возвращает:
-      (df_bt, trades, eq_curve):
-        df_bt: DataFrame, где проставлен 'position' и 'trade_price' по времени
-        trades: список сделок (dict) с ключами entry_time, exit_time, pnl
-        eq_curve: DataFrame с колонкой 'Equity' (капитал по времени).
-    """
-    df = df.copy()
+    df=df.copy()
     df.sort_index(inplace=True)
-    df["position"] = 0
-    df["trade_price"] = np.nan
+    df["position"]=0
+    df["trade_price"]=np.nan
 
-    capital = initial_capital
-    position = 0
-    entry_price = 0.0
-    equity_history = []
-    trades = []
-    current_trade = None
+    capital=initial_capital
+    position=0
+    entry_price=0.0
+    equity_history=[]
+    trades=[]
+    current_trade=None
 
     if "signal" not in df.columns:
-        df["signal"] = 0
+        df["signal"]=0
 
-    idx_list = df.index.to_list()
-    n = len(idx_list)
-    for i in range(n - 1):
-        date_current = idx_list[i]
-        sig = df["signal"].iloc[i]
-        date_next = idx_list[i+1]
-        # Для сделки берём 'open' следующего бара
-        open_next = df["open"].iloc[i+1]
+    idx_list=df.index.to_list()
+    n=len(idx_list)
+    for i in range(n-1):
+        date_current=idx_list[i]
+        sig=df["signal"].iloc[i]
+        date_next=idx_list[i+1]
+        open_next=df["open"].iloc[i+1]
 
-        if position == 0:
-            if sig == 1:
-                # Buy
-                entry_price = open_next
-                position = 1
-                df.loc[date_next, "trade_price"] = entry_price
-                current_trade = {
-                    "entry_time": date_next,
-                    "entry_price": entry_price
+        if position==0:
+            if sig==1:
+                entry_price=open_next
+                position=1
+                df.loc[date_next,"trade_price"]=entry_price
+                current_trade={
+                    "entry_time":date_next,
+                    "entry_price":entry_price
                 }
-        elif position == 1:
-            if sig == -1:
-                # Sell
-                sell_price = open_next
-                profit = sell_price - entry_price
-                capital += profit
-                position = 0
-                df.loc[date_next, "trade_price"] = sell_price
-
+        elif position==1:
+            if sig==-1:
+                sell_price=open_next
+                profit=sell_price-entry_price
+                capital+=profit
+                position=0
+                df.loc[date_next,"trade_price"]=sell_price
                 if current_trade:
-                    current_trade["exit_time"] = date_next
-                    current_trade["exit_price"] = sell_price
-                    current_trade["pnl"] = profit
+                    current_trade["exit_time"]=date_next
+                    current_trade["exit_price"]=sell_price
+                    current_trade["pnl"]=profit
                     trades.append(current_trade)
-                current_trade = None
+                current_trade=None
 
-        # Запомним капитал на текущую дату (date_current)
-        equity_history.append((date_current, capital))
+        equity_history.append((date_current,capital))
 
-    # Если последняя позиция не закрыта, закрываем в конце
-    if position == 1:
-        last_date = idx_list[-1]
-        last_close = df["close"].iloc[-1]
-        profit = last_close - entry_price
-        capital += profit
+    if position==1:
+        last_date=idx_list[-1]
+        last_close=df["close"].iloc[-1]
+        profit=last_close-entry_price
+        capital+=profit
         if current_trade:
-            current_trade["exit_time"] = last_date
-            current_trade["exit_price"] = last_close
-            current_trade["pnl"] = profit
+            current_trade["exit_time"]=last_date
+            current_trade["exit_price"]=last_close
+            current_trade["pnl"]=profit
             trades.append(current_trade)
-        current_trade = None
+        current_trade=None
 
-    eq_curve = pd.DataFrame(equity_history, columns=["time", "Equity"])
-    eq_curve.set_index("time", inplace=True)
-    return df, trades, eq_curve
+    eq_curve=pd.DataFrame(equity_history,columns=["time","Equity"])
+    eq_curve.set_index("time",inplace=True)
+    return df,trades,eq_curve
 
-
-def plot_backtest_results(df, trades, eq_curve, levels=None, title="Backtest Results"):
-    """
-    Рисует один Plotly-график с 2 субплотами:
-      - Верхняя часть: свечи, сигналы (Buy=1, Sell=-1) и при желании уровни
-      - Нижняя часть: кривая Equity (капитал)
-    """
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
-                        row_heights=[0.6, 0.4], vertical_spacing=0.02)
-
-    # Свечной график
-    x_data = df.index
-    candles = go.Candlestick(
+def plot_backtest_results(df,trades,eq_curve,levels=None,title="Backtest Results"):
+    fig=make_subplots(rows=2,cols=1,shared_xaxes=True,
+                      row_heights=[0.6,0.4],vertical_spacing=0.02)
+    x_data=df.index
+    candles=go.Candlestick(
         x=x_data,
         open=df["open"],
         high=df["high"],
@@ -106,54 +82,50 @@ def plot_backtest_results(df, trades, eq_curve, levels=None, title="Backtest Res
         close=df["close"],
         name="OHLC"
     )
-    fig.add_trace(candles, row=1, col=1)
+    fig.add_trace(candles,row=1,col=1)
 
-    # Сигналы Buy / Sell
-    trade_df = df.dropna(subset=["trade_price"])
-    buy_points = trade_df[trade_df["signal"] == 1]
-    sell_points = trade_df[trade_df["signal"] == -1]
+    trade_df=df.dropna(subset=["trade_price"])
+    buy_points=trade_df[trade_df["signal"]==1]
+    sell_points=trade_df[trade_df["signal"]==-1]
 
     fig.add_trace(
         go.Scatter(
             x=buy_points.index,
             y=buy_points["trade_price"],
             mode='markers',
-            marker=dict(color='green', symbol='triangle-up', size=10),
+            marker=dict(color='green',symbol='triangle-up',size=10),
             name='Buy'
         ),
-        row=1, col=1
+        row=1,col=1
     )
     fig.add_trace(
         go.Scatter(
             x=sell_points.index,
             y=sell_points["trade_price"],
             mode='markers',
-            marker=dict(color='red', symbol='triangle-down', size=10),
+            marker=dict(color='red',symbol='triangle-down',size=10),
             name='Sell'
         ),
-        row=1, col=1
+        row=1,col=1
     )
 
-    # Уровни (если переданы)
     if levels:
         for lvl in levels:
             fig.add_hline(
                 y=lvl,
-                line=dict(color='blue', width=1, dash='dash'),
+                line=dict(color='blue',width=1,dash='dash'),
                 annotation_text=f"{lvl:.2f}",
                 annotation_position="top left",
-                row=1, col=1
+                row=1,col=1
             )
 
-    # Кривая Equity внизу
-    eq_line = go.Scatter(
+    eq_line=go.Scatter(
         x=eq_curve.index,
         y=eq_curve["Equity"],
-        mode='lines',
-        line=dict(color='purple', width=2),
+        line=dict(color='purple',width=2),
         name="Equity"
     )
-    fig.add_trace(eq_line, row=2, col=1)
+    fig.add_trace(eq_line,row=2,col=1)
 
     fig.update_layout(
         title=title,

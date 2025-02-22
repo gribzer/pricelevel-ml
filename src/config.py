@@ -17,11 +17,7 @@ TOP_SYMBOLS = [
     "BNBUSDT",
     "DOGEUSDT",
     "ADAUSDT",
-    "LINKUSDT",
     "LTCUSDT",
-    "AVAXUSDT",
-    "SUIUSDT",
-    "TONUSDT",
 ]
 
 BYBIT_CATEGORY = "spot"   # или "linear" для USDT-перп
@@ -33,7 +29,7 @@ H4_INTERVAL    = "240"
 H1_INTERVAL    = "60"
 
 BYBIT_START_DATE = "2023-01-01"
-BYBIT_END_DATE   = "2025-01-01"
+BYBIT_END_DATE   = "2025-01-20"
 
 # -------------------------------------------------
 # Пути к данным
