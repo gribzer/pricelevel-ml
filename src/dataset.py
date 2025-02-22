@@ -3,38 +3,45 @@
 import torch
 from torch.utils.data import Dataset
 import numpy as np
-from .config import SEQ_LEN, INPUT_SIZE
+from .config import SEQ_LEN
 
-class CryptoLevelsDataset(Dataset):
+class MultiSymbolDataset(Dataset):
     """
-    Формируем выборку (X, y):
-    X - последовательность длиной SEQ_LEN,
-    y - метка 0/1, характеризующая последнюю точку последовательности.
+    Допустим, у нас большой df со всеми инструментами,
+    где есть колонки:
+      - close
+      - symbol_id
+      - level_label
+    seq_len: длина последовательности.
     """
-    def __init__(self, df, label_col='level_label', seq_len=SEQ_LEN, input_size=INPUT_SIZE):
-        # Предполагаем, что df содержит столбец 'close' (и др.) + столбец label_col (метки)
+    def __init__(self, df, seq_len=SEQ_LEN):
         self.seq_len = seq_len
 
-        # Можно взять несколько колонок. Предположим, что используем только 'close'.
-        # Но можно расширять: ['close', 'volume', ...]
-        self.feature_cols = ['close']
-        data_np = df[self.feature_cols].values
-        # Нормализация (упрощённая) - можно заменить на более сложный scaler
-        mean = data_np.mean(axis=0)
-        std = data_np.std(axis=0)
-        self.data = (data_np - mean) / (std + 1e-8)
-
-        # Метки
-        self.labels = df[label_col].values.astype(int)
+        # Предположим, что df уже более-менее отнормирован или 
+        # хотя бы 'close' в одном масштабе. Если нет, нужно либо
+        # делать groupby(symbol_id) и нормировать отдельно, либо 
+        # global minmax/meanstd...
+        
+        self.close_arr = df["close"].values
+        self.symbol_arr = df["symbol_id"].values  # int
+        self.label_arr = df["level_label"].values.astype(float)
+        
+        self.n = len(df)
 
     def __len__(self):
-        return len(self.data) - self.seq_len
+        return self.n - self.seq_len
 
     def __getitem__(self, idx):
-        x_seq = self.data[idx : idx+self.seq_len]
-        y_label = self.labels[idx+self.seq_len-1]  # метка на последнем баре
-        # Превращаем в тензоры
-        x_seq = torch.tensor(x_seq, dtype=torch.float32)
-        y_label = torch.tensor(y_label, dtype=torch.float32)
-        # Вход нужно иметь форму (seq_len, input_size)
-        return x_seq, y_label
+        # seq_len от idx до idx+seq_len
+        seq_close = self.close_arr[idx : idx+self.seq_len]
+        y_label = self.label_arr[idx + self.seq_len - 1]
+
+        # берем symbol_id первого бара (или последнего — на ваше усмотрение)
+        symbol_id = self.symbol_arr[idx]
+
+        # Тензоры
+        seq_close_t = torch.tensor(seq_close, dtype=torch.float32).view(-1, 1)
+        symbol_id_t = torch.tensor(symbol_id, dtype=torch.long)
+        y_label_t = torch.tensor(y_label, dtype=torch.float32)
+
+        return seq_close_t, symbol_id_t, y_label_t

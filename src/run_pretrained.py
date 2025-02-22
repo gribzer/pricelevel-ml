@@ -1,3 +1,5 @@
+# src/run_pretrained.py
+
 import sys
 import os
 
@@ -11,61 +13,37 @@ from .data_fetcher import load_bybit_data
 from .backtest import run_backtest, plot_backtest_results
 
 def run_pretrained_pipeline(model_uri=None, device="cpu", threshold=0.5):
-    """
-    Запускает инференс и бэктест уже обученной модели, без повторного обучения.
-
-    model_uri: 
-      - Может быть локальным путём к .pth-файлу (e.g. 'model.pth')
-      - Или URI MLflow (e.g. 'runs:/<RUN_ID>/models').
-
-    threshold:
-      - Если выход модели — вероятность (0..1),
-        то при p >= threshold считаем signal=+1, иначе 0.
-    """
-
     if not model_uri:
         raise ValueError(
-            "Не задан model_uri! Пример вызова:\n"
+            "Не задан model_uri! Пример:\n"
             "  python -m src.run_pretrained runs:/<RUN_ID>/models [threshold]\n"
             "или\n"
             "  python -m src.run_pretrained model.pth [threshold]"
         )
 
-    # Загрузка модели
     print(f"=== Загрузка модели: {model_uri} ===")
     if model_uri.startswith("runs:/") or model_uri.startswith("mlflow:/"):
-        print("MLflow URI обнаружен => mlflow.pytorch.load_model(...)")
+        print("MLflow URI => mlflow.pytorch.load_model")
         model = mlflow.pytorch.load_model(model_uri)
     else:
-        print("Предполагаем локальный файл => torch.load(...)")
+        print("Локальный файл => torch.load(...)")
         model = torch.load(model_uri, map_location=device)
 
     model.to(device)
     model.eval()
-    print("Модель загружена и переведена в eval-режим.")
 
-    # Загрузка исторических данных
-    print("=== Загрузка исторических данных (Bybit) ===")
-    df = load_bybit_data()  # должен вернуть DataFrame с колонками времени, open, high, low, close и т.д.
-
-    # Приводим названия цен к заглавной форме
-    if "open" in df.columns:
-        df.rename(columns={
-            "open": "Open",
-            "high": "High",
-            "low": "Low",
-            "close": "Close"
-        }, inplace=True)
-
-    for col in ["Open", "High", "Low", "Close"]:
+    # Загрузка данных
+    df = load_bybit_data()
+    # Убедимся, что есть нужные колонки
+    for col in ["open","high","low","close"]:
         if col not in df.columns:
-            raise ValueError(f"Колонка '{col}' не найдена в df! Есть колонки: {df.columns.tolist()}")
+            raise ValueError(f"Нет колонки {col}")
 
-    # Генерация сигналов путём инференса
+    # Инференс
     class SimplePriceDataset(Dataset):
         def __init__(self, df, seq_len=50):
             self.seq_len = seq_len
-            self.prices = df["Close"].values
+            self.prices = df["close"].values
             self.n = len(self.prices)
         def __len__(self):
             return self.n - self.seq_len
@@ -82,28 +60,18 @@ def run_pretrained_pipeline(model_uri=None, device="cpu", threshold=0.5):
     with torch.no_grad():
         for batch_x in loader:
             batch_x = batch_x.to(device)
-            out = model(batch_x)  # [batch, 1], e.g. sigmoid
+            out = model(batch_x)
             p = out.squeeze().cpu().numpy()
             if p.ndim == 0:
-                p = [p]  # если batch=1
+                p = [p]
             preds.extend(p.tolist())
 
-    # Первые seq_len баров не имеют прогноза
     df["pred_proba"] = [None]*seq_len + preds
-
-    # Простая логика: если p>=threshold => signal=1
     df["signal"] = 0
     df.loc[df["pred_proba"] >= threshold, "signal"] = 1
 
-    print(f"=== Генерация сигналов: p>={threshold} => Buy ===")
-    print(f"Итоговое кол-во сигналов Buy: {(df['signal']==1).sum()}")
-
-    # Запуск бэктеста
     df_bt, trades, eq_curve = run_backtest(df, initial_capital=10000.0)
     plot_backtest_results(df_bt, trades, eq_curve)
-
-    print("=== Бэктест завершён. График отобразится в Plotly-окне ===")
-
 
 def main_pretrained():
     if len(sys.argv) < 2:
