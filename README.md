@@ -41,6 +41,7 @@
 - README.md
 - requirements.txt
 - src/
+- notebooks/
 
 ## Установка
 
@@ -71,6 +72,7 @@ python src/main.py
 - `src/cluster_levels.py`: Функции для нахождения и кластеризации локальных экстремумов в данных о ценах.
 - `src/train.py`: Функции для обучения и оценки модели.
 - `src/main.py`: Основной скрипт для запуска всего пайплайна.
+- `notebooks/`: Jupyter Notebooks для анализа данных и экспериментов.
 
 ## Лицензия
 
