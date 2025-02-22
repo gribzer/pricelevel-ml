@@ -3,11 +3,17 @@
 import numpy as np
 import pandas as pd
 from sklearn.cluster import DBSCAN
-from .config import EPS_PERCENT, MIN_SAMPLES, WINDOW_SIZE
 
-def find_local_extrema(prices, window=WINDOW_SIZE):
+# Параметры по умолчанию, можно брать из config или ставить жёстко
+DEFAULT_WINDOW = 15
+DEFAULT_EPS_FRAC = 0.01   # 1%
+DEFAULT_MIN_SAMPLES = 5   # нужно минимум 5 экстремумов в кластере
+
+def find_local_extrema(prices, window=DEFAULT_WINDOW):
     """
-    Возвращает (local_maxima, local_minima) — списки [(time, price), ...]
+    Ищем локальные максимумы/минимумы по окну ±window.
+    Возвращаем два списка: local_maxima, local_minima,
+    в каждом [(time, price), ...].
     """
     local_maxima = []
     local_minima = []
@@ -24,10 +30,14 @@ def find_local_extrema(prices, window=WINDOW_SIZE):
     
     return local_maxima, local_minima
 
-def cluster_extrema(maxima, minima, eps_frac=EPS_PERCENT, min_samples=MIN_SAMPLES):
+def cluster_extrema(maxima, minima,
+                    eps_frac=DEFAULT_EPS_FRAC,
+                    min_samples=DEFAULT_MIN_SAMPLES):
     """
-    Объединяем все экстремумы (time, price) и кластеризуем по цене (DBSCAN).
-    Возвращает список цен (float).
+    Объединяем maxima+minima, потом DBSCAN по цене.
+    eps_frac => eps_val = mean_price * eps_frac
+    min_samples => минимальное кол-во точек для кластера
+    Возвращаем список уровней (float).
     """
     all_points = maxima + minima
     if not all_points:
@@ -43,15 +53,30 @@ def cluster_extrema(maxima, minima, eps_frac=EPS_PERCENT, min_samples=MIN_SAMPLE
     levels = []
     for lbl in unique_labels:
         if lbl == -1:
+            # шум
             continue
         cluster_points = prices[labels == lbl]
         level_price = cluster_points.mean()
         levels.append(level_price)
     return sorted(levels)
 
+def remove_too_close_levels(levels, min_dist_frac=0.01):
+    """
+    Удаляем уровни, которые ближе друг к другу, чем min_dist_frac*цена.
+    Например, min_dist_frac=0.01 => 1%.
+    """
+    if not levels:
+        return []
+    levels = sorted(levels)
+    filtered = [levels[0]]
+    for lvl in levels[1:]:
+        if abs(lvl - filtered[-1]) / lvl >= min_dist_frac:
+            filtered.append(lvl)
+    return filtered
+
 def make_binary_labels(df, levels, threshold_frac=0.001):
     """
-    level_label = 1, если close рядом с одним из levels (± threshold_frac * close).
+    level_label=1, если close в пределах ± (threshold_frac * close) от уровня.
     """
     if not levels:
         return pd.Series(data=0, index=df.index, name='level_label')
