@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/f0a04f94b9ba4f9b8917a4cfaacdef0b/artifacts
+end_time: 1740206522202
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: f0a04f94b9ba4f9b8917a4cfaacdef0b
+run_name: glamorous-seal-165
+run_uuid: f0a04f94b9ba4f9b8917a4cfaacdef0b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740206110849
+status: 3
+tags: []
+user_id: webse
