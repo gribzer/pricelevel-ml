@@ -7,7 +7,7 @@ from .config import EPS_PERCENT, MIN_SAMPLES, WINDOW_SIZE
 
 def find_local_extrema(prices, window=WINDOW_SIZE):
     """
-    Возвращает списки (индексы, цены) локальных максимумов и минимумов.
+    Возвращает (local_maxima, local_minima) — списки [(time, price), ...]
     """
     local_maxima = []
     local_minima = []
@@ -26,21 +26,20 @@ def find_local_extrema(prices, window=WINDOW_SIZE):
 
 def cluster_extrema(maxima, minima, eps_frac=EPS_PERCENT, min_samples=MIN_SAMPLES):
     """
-    DBSCAN-кластеризация экстремумов по оси цены.
-    Возвращает список уровней (float).
+    Объединяем все экстремумы (time, price) и кластеризуем по цене (DBSCAN).
+    Возвращает список цен (float).
     """
     all_points = maxima + minima
     if not all_points:
         return []
 
-    prices = np.array([p for (_, p) in all_points]).reshape(-1, 1)
+    prices = np.array([p for (_, p) in all_points]).reshape(-1,1)
     mean_price = prices.mean()
-    eps_val = mean_price * eps_frac  # радиус кластера
+    eps_val = mean_price * eps_frac
 
     db = DBSCAN(eps=eps_val, min_samples=min_samples).fit(prices)
     labels = db.labels_
     unique_labels = set(labels)
-
     levels = []
     for lbl in unique_labels:
         if lbl == -1:
@@ -48,12 +47,11 @@ def cluster_extrema(maxima, minima, eps_frac=EPS_PERCENT, min_samples=MIN_SAMPLE
         cluster_points = prices[labels == lbl]
         level_price = cluster_points.mean()
         levels.append(level_price)
-    levels = sorted(levels)
-    return levels
+    return sorted(levels)
 
 def make_binary_labels(df, levels, threshold_frac=0.001):
     """
-    Метка = 1, если close рядом с одним из levels (± threshold_frac).
+    level_label = 1, если close рядом с одним из levels (± threshold_frac * close).
     """
     if not levels:
         return pd.Series(data=0, index=df.index, name='level_label')

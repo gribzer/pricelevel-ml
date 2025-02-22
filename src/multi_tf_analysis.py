@@ -7,7 +7,9 @@ from .config import (
 )
 
 def compute_atr(df_daily: pd.DataFrame, period=7) -> float:
-    # ... как раньше ...
+    """
+    Простой ATR (rolling mean).
+    """
     highs = df_daily["high"].values
     lows = df_daily["low"].values
     closes = df_daily["close"].values
@@ -28,17 +30,19 @@ def filter_levels(df_daily, df_4h, df_1h, raw_levels,
                   atr_buffer=ATR_BUFFER,
                   volume_factor=VOLUME_FACTOR):
     """
-    Мультитаймфреймовая фильтрация.
-    - df_daily: дневной фрейм
-    - df_4h, df_1h: для проверки объёмов / скорости подхода
+    Учитываем дневной (df_daily) + 4h (df_4h) + 1h (df_1h) 
+    при фильтрации уровней.
     """
     filtered = []
+    if df_daily.empty:
+        return []
     now_ts = df_daily.index[-1]
     current_atr = compute_atr(df_daily, period=7)
     if pd.isna(current_atr):
         return []
 
     for lvl in raw_levels:
+        # 1) count touches
         touches = 0
         last_touch_ts = None
         for i in range(len(df_daily)):
@@ -54,23 +58,21 @@ def filter_levels(df_daily, df_4h, df_1h, raw_levels,
         if diff_days > max_age_days:
             continue
 
-        # MTF-проверка. Пример: берём последние 3 дня до last_touch_ts в 4h
-        date_threshold = last_touch_ts - pd.Timedelta(days=3)
-        df_4h_slice = df_4h[(df_4h.index >= date_threshold) & (df_4h.index <= last_touch_ts)]
-        if len(df_4h_slice) > 2:
-            avg_4h_vol = df_4h_slice["volume"].mean()
-            global_4h_vol = df_4h["volume"].mean()
-            if avg_4h_vol < volume_factor * global_4h_vol:
-                # объёмы не сильно повышены
+        # MTF (4h)
+        if (df_4h is not None) and (not df_4h.empty):
+            date_threshold = last_touch_ts - pd.Timedelta(days=3)
+            df_4h_slice = df_4h[(df_4h.index>=date_threshold) & (df_4h.index<=last_touch_ts)]
+            if len(df_4h_slice)>2:
+                avg_4h_vol = df_4h_slice["volume"].mean()
+                global_4h_vol = df_4h["volume"].mean()
+                # if avg_4h_vol < volume_factor * global_4h_vol: pass
+
+        # MTF (1h)
+        if (df_1h is not None) and (not df_1h.empty):
+            df_1h_slice = df_1h[(df_1h.index>=date_threshold) & (df_1h.index<=last_touch_ts)]
+            if len(df_1h_slice)>2:
+                # можно проверить скорость подхода
                 pass
-        
-        # Аналогично 1H (проверяем скорость подхода)
-        df_1h_slice = df_1h[(df_1h.index >= date_threshold) & (df_1h.index <= last_touch_ts)]
-        if len(df_1h_slice) > 2:
-            price_start = df_1h_slice["close"].iloc[0]
-            price_end   = df_1h_slice["close"].iloc[-1]
-            # Пример: если price_end - price_start < 0.2 * current_atr => поджатие
-            # ...
 
         filtered.append(lvl)
     return sorted(filtered)

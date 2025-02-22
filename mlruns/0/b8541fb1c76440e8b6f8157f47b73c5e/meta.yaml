@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/b8541fb1c76440e8b6f8157f47b73c5e/artifacts
+end_time: 1740230746400
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: b8541fb1c76440e8b6f8157f47b73c5e
+run_name: big-bat-228
+run_uuid: b8541fb1c76440e8b6f8157f47b73c5e
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740230014003
+status: 3
+tags: []
+user_id: webse

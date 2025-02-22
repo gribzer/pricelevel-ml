@@ -8,14 +8,10 @@ from pybit.unified_trading import HTTP
 
 from .config import (
     BYBIT_API_KEY, BYBIT_API_SECRET,
-    BYBIT_CATEGORY,
-    BYBIT_START_DATE, BYBIT_END_DATE,
-    RAW_DATA_PATH,
-    DAILY_INTERVAL, H4_INTERVAL, H1_INTERVAL
+    RAW_DATA_PATH
 )
 
 def interpret_interval_ms(interval_str: str) -> int:
-    # ... (как прежде) ...
     interval_str = interval_str.upper()
     if interval_str.isdigit():
         return int(interval_str) * 60_000
@@ -29,8 +25,10 @@ def interpret_interval_ms(interval_str: str) -> int:
 
 def _fetch_bybit_kline(symbol, category, interval, start, end,
                        api_key, api_secret):
-    # Функция низкого уровня: скачивает свечи
-    # аналогична fetch_bybit_data, но можем назвать _fetch_bybit_kline
+    """
+    Низкоуровневая функция: качает свечи c Bybit v5,
+    без кэширования.
+    """
     start_dt = datetime.strptime(start, "%Y-%m-%d")
     end_dt   = datetime.strptime(end,   "%Y-%m-%d")
     start_ms = int(start_dt.timestamp() * 1000)
@@ -69,6 +67,7 @@ def _fetch_bybit_kline(symbol, category, interval, start, end,
 
         for record in items:
             if category in ["linear", "inverse"]:
+                # [start_ms, end_ms, open, high, low, close, volume, ...]
                 start_candle_ms = int(record[0])
                 open_p   = record[2]
                 high_p   = record[3]
@@ -76,6 +75,7 @@ def _fetch_bybit_kline(symbol, category, interval, start, end,
                 close_p  = record[5]
                 volume_p = record[6]
             elif category == "spot":
+                # [openTime_ms, open, high, low, close, volume, ...]
                 start_candle_ms = int(record[0])
                 open_p   = record[1]
                 high_p   = record[2]
@@ -107,6 +107,7 @@ def _fetch_bybit_kline(symbol, category, interval, start, end,
                 break
             current_start = next_start + 1
 
+        # Чтобы не задушить Bybit
         time.sleep(0.25)
 
     if not all_records:
@@ -122,23 +123,32 @@ def _fetch_bybit_kline(symbol, category, interval, start, end,
         df[c] = df[c].astype(float)
     return df
 
-def load_single_symbol_multi_timeframe(symbol, 
-                                       category=BYBIT_CATEGORY,
-                                       start=BYBIT_START_DATE,
-                                       end=BYBIT_END_DATE,
-                                       daily_interval=DAILY_INTERVAL,
-                                       h4_interval=H4_INTERVAL,
-                                       h1_interval=H1_INTERVAL):
+def load_kline_cached(symbol, category, interval, start, end):
     """
-    Загружает 3 фрейма: (df_daily, df_4h, df_1h) для одного symbol'a.
+    Загрузка с кэшированием CSV (в data/raw).
+    Если CSV уже есть, берём из него. Иначе качаем + сохраняем.
     """
-    # 1) Daily
-    df_daily = _fetch_bybit_kline(symbol, category, daily_interval, start, end,
-                                  BYBIT_API_KEY, BYBIT_API_SECRET)
-    # 2) 4H
-    df_4h = _fetch_bybit_kline(symbol, category, h4_interval, start, end,
-                               BYBIT_API_KEY, BYBIT_API_SECRET)
-    # 3) 1H
-    df_1h = _fetch_bybit_kline(symbol, category, h1_interval, start, end,
-                               BYBIT_API_KEY, BYBIT_API_SECRET)
-    return df_daily, df_4h, df_1h
+    os.makedirs(RAW_DATA_PATH, exist_ok=True)
+    csv_fname = f"{symbol}_{category}_{interval}_{start}_{end}.csv"
+    csv_path = os.path.join(RAW_DATA_PATH, csv_fname)
+
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path, parse_dates=["open_time"], index_col="open_time")
+        return df
+
+    df = _fetch_bybit_kline(symbol, category, interval, start, end,
+                            BYBIT_API_KEY, BYBIT_API_SECRET)
+    if not df.empty:
+        df.to_csv(csv_path)
+    return df
+
+def load_single_symbol_multi_timeframe(symbol, category,
+                                       start, end,
+                                       daily_interval, h4_interval, h1_interval):
+    """
+    Возвращает (df_daily, df_4h, df_1h) с кэшированием CSV.
+    """
+    df_d  = load_kline_cached(symbol, category, daily_interval, start, end)
+    df_4h = load_kline_cached(symbol, category, h4_interval, start, end)
+    df_1h = load_kline_cached(symbol, category, h1_interval, start, end)
+    return df_d, df_4h, df_1h
