@@ -27,6 +27,7 @@ def load_kline_incremental(
     start_dt = pd.to_datetime(start)
     end_dt   = pd.to_datetime(end)
 
+    # Читаем, если существует
     if os.path.exists(csv_path):
         df_full = pd.read_csv(csv_path, parse_dates=["open_time"], index_col="open_time")
         df_full.sort_index(inplace=True)
@@ -43,8 +44,10 @@ def load_kline_incremental(
     # Если файл вообще пуст
     if df_full.empty:
         print(f"[{symbol} {interval}] CSV empty => fetch {start}..{end} in one shot.")
-        df_new = _fetch_bybit_kline(symbol, category, interval, start, end,
-                                    api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET)
+        df_new = _fetch_bybit_kline(
+            symbol, category, interval, start, end,
+            api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET
+        )
         if not df_new.empty:
             df_full = df_new
             df_full.sort_index(inplace=True)
@@ -60,10 +63,12 @@ def load_kline_incremental(
             fetch_start = start_dt.strftime("%Y-%m-%d")
             fetch_end   = left_end_dt.strftime("%Y-%m-%d")
             print(f"[{symbol} {interval}] Догружаем слева: {fetch_start}..{fetch_end}")
-            if fetch_start<=fetch_end:
-                df_left = _fetch_bybit_kline(symbol, category, interval,
-                                             fetch_start, fetch_end,
-                                             api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET)
+            if fetch_start <= fetch_end:
+                df_left = _fetch_bybit_kline(
+                    symbol, category, interval,
+                    fetch_start, fetch_end,
+                    api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET
+                )
                 if not df_left.empty:
                     if df_left.index.tz is not None:
                         df_left.index = df_left.index.tz_convert(None)
@@ -72,7 +77,7 @@ def load_kline_incremental(
                     df_full.to_csv(csv_path)
                 else:
                     print(f"[{symbol} {interval}] no data from Bybit for left fetch => skip.")
-        # обновим csv_start
+        # обновим csv_start / csv_end
         csv_start = df_full.index.min()
         csv_end   = df_full.index.max()
 
@@ -83,10 +88,12 @@ def load_kline_incremental(
             fetch_start = right_start_dt.strftime("%Y-%m-%d")
             fetch_end   = end_dt.strftime("%Y-%m-%d")
             print(f"[{symbol} {interval}] Догружаем справа: {fetch_start}..{fetch_end}")
-            if fetch_start<=fetch_end:
-                df_right = _fetch_bybit_kline(symbol, category, interval,
-                                              fetch_start, fetch_end,
-                                              api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET)
+            if fetch_start <= fetch_end:
+                df_right = _fetch_bybit_kline(
+                    symbol, category, interval,
+                    fetch_start, fetch_end,
+                    api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET
+                )
                 if not df_right.empty:
                     if df_right.index.tz is not None:
                         df_right.index = df_right.index.tz_convert(None)

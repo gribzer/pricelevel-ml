@@ -28,7 +28,7 @@ DAILY_INTERVAL = "D"
 H4_INTERVAL    = "240"
 H1_INTERVAL    = "60"
 
-BYBIT_START_DATE = "2023-01-01"
+BYBIT_START_DATE = "2024-01-01"
 BYBIT_END_DATE   = "2025-01-20"
 
 # -------------------------------------------------
