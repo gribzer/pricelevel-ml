@@ -1,8 +1,36 @@
 # Price Level ML
 
-This project aims to detect price levels in cryptocurrency trading data using machine learning techniques. The project fetches historical data from Bybit, processes it, and trains a model to identify significant price levels.
+Этот проект направлен на обнаружение уровней цен в данных о торговле криптовалютами с использованием методов машинного обучения. Проект получает исторические данные с Bybit, обрабатывает их и обучает модель для выявления значительных уровней цен.
 
-## Project Structure
+## Сбор данных
+
+Проект начинает с получения исторических данных о торговле криптовалютами с платформы Bybit. Это может включать такие данные, как цены открытия, закрытия, максимальные и минимальные цены, объемы торгов и временные метки.
+
+## Предобработка данных
+
+Полученные данные проходят этап предобработки. Это может включать:
+
+- Очистку данных: удаление или обработка пропущенных значений.
+- Нормализацию данных: приведение данных к единому масштабу.
+- Создание дополнительных признаков: например, вычисление скользящих средних, индикаторов технического анализа и других признаков, которые могут помочь модели лучше понять данные.
+
+## Обучение модели
+
+После предобработки данные используются для обучения модели машинного обучения. В зависимости от задачи, это может быть регрессионная модель, модель классификации или другая подходящая модель. Модель обучается на исторических данных, чтобы выявить значительные уровни цен, такие как уровни поддержки и сопротивления.
+
+## Оценка модели
+
+После обучения модель оценивается на тестовых данных, которые не использовались в процессе обучения. Это позволяет понять, насколько хорошо модель справляется с задачей на новых данных. Метрики оценки могут включать точность, полноту, F1-меру и другие показатели, в зависимости от типа модели и задачи.
+
+## Прогнозирование
+
+Обученная и оцененная модель используется для прогнозирования значительных уровней цен на новых данных. Это может помочь трейдерам принимать более обоснованные решения на основе выявленных уровней цен.
+
+## Визуализация результатов
+
+Результаты работы модели могут быть визуализированы для удобства анализа. Это может включать графики с историческими данными и отмеченными уровнями цен, которые модель считает значительными.
+
+## Структура проекта
 
 - .env
 - .gitignore
@@ -14,51 +42,36 @@ This project aims to detect price levels in cryptocurrency trading data using ma
 - requirements.txt
 - src/
 
+## Установка
 
-## Installation
+```sh
+git clone https://github.com/yourusername/pricelevel-ml.git
+cd pricelevel-ml
+python -m venv venv
+source venv/bin/activate  # На Windows используйте `venv\Scripts\activate`
+pip install -r requirements.txt
+```
 
-    ```sh
-    git clone https://github.com/yourusername/pricelevel-ml.git
-    cd pricelevel-ml
-    ```
-    ```
+## Конфигурация
 
-    ```sh
-    python -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-    ```
-    ```
+Обновите файл .env вашими учетными данными API Bybit и другими параметрами конфигурации.
 
-    ```sh
-    pip install -r requirements.txt
-    ```
-    ```
+## Использование
 
-## Configuration
+```sh
+python src/data_fetcher.py
+python src/main.py
+```
 
-Update the [.env](http://_vscodecontentref_/8) file with your Bybit API credentials and other configuration parameters.
+## Модули проекта
 
-## Usage
+- `src/config.py`: Параметры конфигурации для проекта.
+- `src/data_fetcher.py`: Функции для получения исторических данных с Bybit.
+- `src/dataset.py`: Класс Dataset для подготовки данных к обучению.
+- `src/cluster_levels.py`: Функции для нахождения и кластеризации локальных экстремумов в данных о ценах.
+- `src/train.py`: Функции для обучения и оценки модели.
+- `src/main.py`: Основной скрипт для запуска всего пайплайна.
 
-    ```sh
-    python src/data_fetcher.py
-    ```
-    ```
+## Лицензия
 
-    ```sh
-    python src/main.py
-    ```
-    ```
-
-## Project Modules
-
-- **`src/config.py`**: Configuration parameters for the project.
-- **`src/data_fetcher.py`**: Functions to fetch historical data from Bybit.
-- **`src/dataset.py`**: Dataset class for preparing the data for training.
-- **`src/cluster_levels.py`**: Functions to find and cluster local extrema in the price data.
-- **`src/train.py`**: Functions to train and evaluate the model.
-- **`src/main.py`**: Main script to run the entire pipeline.
-
-## License
-This project is licensed under the MIT License.
-This project is licensed under the MIT License.
+Этот проект лицензирован по лицензии MIT.
