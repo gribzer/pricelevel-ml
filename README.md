@@ -1,234 +1,237 @@
-# Проект pricelevel-ml
+# Проект `pricelevel-ml`
 
-pricelevel-ml — это Python-проект для:
+**pricelevel-ml** — это Python-проект для:
 
-- Загрузки исторических данных (свечей OHLCV) по ряду инструментов (крипто) с помощью Bybit API (Unified v5).
-- Определения ключевых ценовых уровней (поддержка/сопротивление) на разных таймфреймах (D, 4h, 1h).
-- Обучения простой LSTM-модели (пример) на данных дневного таймфрейма (или другом), чтобы предсказывать (в демо-версии) close.
-- Отрисовки интерактивных графиков (Plotly) с отмеченными уровнями.
-
-Проект рассчитан на демонстрацию подхода:
-
-- инкрементальная подгрузка данных
-- нахождение «двух» ближайших к цене уровней (поддержка, сопротивление)
-- простая модель (LSTM) на PyTorch
+1. **Получения рыночных данных** (исторические и реальные потоки) по нескольким биржам:
+        - Bybit (v5 Unified)
+        - BingX (Swap V2)
+        - Huobi/HTX (Spot)
+2. **Сбора** этих данных в удобном виде (свечи OHLCV) и **определения** ключевых ценовых уровней (поддержка/сопротивление) на разных таймфреймах.
+3. **Обучения** (пример) LSTM-модели на исторических данных (PyTorch), чтобы предсказывать закрытие свечи/разные сигналы.
+4. **Визуализации** в **реальном времени**:
+        - Через **TradingView Lightweight Charts** (или Chart.js / Highcharts) — чистый HTML+JS фронтенд, подтягивающий данные из Python-бэкенда (Flask+SocketIO/WebSocket).
+        - Опционально через **Dash** — для более глубоких аналитических панелей.
 
 ## 1. Структура проекта
 
-Дерево:
+Пример дерева каталогов:
 
-```plaintext
+```bash
 pricelevel-ml/
-├── src/
+├── run.py                   # (опционально) общий entry point
+├── backend/
+│   ├── server.py            # Flask + SocketIO WebSocket server
 │   ├── __init__.py
-│   ├── config.py
-│   ├── incremental_fetcher.py
-│   ├── liquidity_levels.py
-│   ├── cluster_levels.py     (при необходимости)
-│   ├── dataset.py
-│   ├── train.py
-│   ├── main.py               (главный entry point)
-│   ├── ...
+│   └── ...
+├── core/
+│   ├── __init__.py
+│   ├── config.py            # Все ключи, настройки
+│   ├── data_fetcher/        # Модули для историч. скачивания (REST)
+│   │   ├── __init__.py
+│   │   ├── bybit.py
+│   │   ├── bingx.py
+│   │   ├── htx.py
+│   │   └── ...
+│   ├── ws_clients/          # Модули для реального потока (WS)
+│   │   ├── __init__.py
+│   │   ├── aggregator.py    # CandleAggregator
+│   │   ├── bybit_ws.py
+│   │   ├── bingx_ws.py
+│   │   ├── htx_ws.py
+│   │   └── ...
+│   ├── models/              # Логика обучения, модели
+│   │   ├── __init__.py
+│   │   ├── train.py
+│   │   └── ...
+│   ├── pipeline/
+│   │   ├── __init__.py
+│   │   ├── main_pipeline.py
+│   │   └── realtime_model.py
+│   └── ...
+├── webapp/
+│   ├── dash_app/
+│   │   ├── app.py           # Dash-приложение (аналитика)
+│   ├── tradingview/         # Фронт c lightweight-charts
+│   │   ├── index.html
+│   │   └── app.js           # JS-код (подключ. к SocketIO)
+│   ├── chartjs/             # (опцион.) Пример с chart.js
+│   └── ...
 ├── data/
-│   ├── raw/                  (csv-файлы с сырыми свечами)
+│   ├── raw/                 # csv-файлы с сырьём
 │   └── processed/
 ├── requirements.txt
-├── README.md (или docs)
+├── README.md                # Настоящий файл документации
 └── ...
 ```
 
-### Основные модули
+**Ключевые** элементы:
 
-#### config.py
+### 1.1. `core/config.py`
 
-Содержит глобальные параметры:
+- Хранит API-ключи, эндпоинты:
 
-- BYBIT_CATEGORY ("spot" или "linear")
-- TOP_SYMBOLS (список: "BTCUSDT", "ETHUSDT" ...)
-- Периоды: DAYS_D (сколько дней назад для дневок), DAYS_4H (для 4h), DAYS_1H (для 1h)
-- Параметры обучения: NUM_EPOCHS, BATCH_SIZE, LEARNING_RATE и др.
+        ```python
+        BYBIT_API_KEY = ...
+        BINGX_WS_ENDPOINT = "wss://open-api-swap.bingx.com/swap-market"
+        HTX_WS_ENDPOINT = "wss://api.huobi.pro/ws"
+        TIMEFRAME_SECONDS = 60  # или 3600
+        ...
+        ```
 
-#### incremental_fetcher.py
+### 1.2. `core/data_fetcher/` (REST-fetch)
 
-Модуль, в котором реализована логика загрузки свечей в CSV-файл. Главная функция — `load_kline_incremental(...)`, которая:
+- `bybit.py`, `bingx.py`, `htx.py` — для **исторической** выгрузки свечей (через HTTP/REST).
 
-- Проверяет, есть ли уже CSV
-- Если нет, скачивает всё (`_fetch_bybit_kline_full`)
-- Если есть, догружает недостающее справа,
-- Возвращает DataFrame за запрошенный период.
+### 1.3. `core/ws_clients/` (WebSocket потоки)
 
-Здесь же находится `_fetch_bybit_kline_full` — функция «глубокой» выгрузки с помощью Bybit v5. Важно:
+- `aggregator.py`: класс `CandleAggregator`, собирающий сделки → свечи.
+- `bybit_ws.py`, `bingx_ws.py`, `htx_ws.py`: классы, которые подключаются к соответствующим WS-эндпоинтам, распаковывают gzip (при необходимости), парсят сделки, вызывают `aggregator.add_trade(...)`.
 
-- Обрабатывает category=="spot" и category=="linear"
-- Парсит ответ массива [openTime, open, high, low, close, volume]
-- Защита от зацикливания, если last_ts не растёт
-- Складывает всё в DataFrame (open_time → DatetimeIndex).
+### 1.4. `core/models/`
 
-#### liquidity_levels.py
+- `train.py`: LSTM-модель, `train_model`, `evaluate_model`.
+- При желании `inference.py`.
 
-Логика, объединяющая:
+### 1.5. `core/pipeline/`
 
-- вызов `load_kline_incremental(symbol, category, interval, ...)` для дневного / 4h / 1h,
-- функции `find_liquid_levels` (которую вы можете взять из `find_liquid_core` или `cluster_levels`) для определения двух уровней (support/resistance).
+- `main_pipeline.py`: скрипты, где вы делаете:
+        - Скачивание исторических данных,
+        - Формирование датасета,
+        - Обучение (train.py) + оценка,
+        - Поиск уровней.
+- `realtime_model.py`: пример дообучения «на лету», если хотим.
 
-#### dataset.py
+### 1.6. `webapp/tradingview/`
 
-Определяет класс `MultiSymbolDataset`, который:
+- `index.html`: HTML + подключение `lightweight-charts` + `socket.io`.
+- `app.js`: JS, где создаётся chart, подключается к backend (`socket.io`), обрабатывает `new_candle` и обновляет график.
 
-- Формирует выборку (seq_len исторических цен → предсказываем target),
-- Нормирует признаки (min/max) (необязательно),
-- Возвращает (x_seq, symbol_id, y).
+### 1.7. `backend/server.py`
 
-#### train.py
+- Flask + SocketIO, отдаёт статику (`index.html`), запускает потоки WS-клиентов (Bybit, BingX, HTX), рассылает новые закрытые свечи на фронтенд.
 
-- Модель `MultiSymbolLSTM` (LSTM + Embedding символа),
-- Функции `train_model_multi`, `evaluate_model_multi`.
+---
 
-#### main.py
+## 2. Как работает поток данных (WS)
 
-Главный entry point. Логика:
+Для **каждой** биржи (Bybit/BingX/HTX) есть отдельный класс, например `BybitWSClient`, который:
 
-- Для каждого символа из TOP_SYMBOLS:
-        - Запрашивает дневные, 4h, 1h данные (последние DAYS_D, DAYS_4H, DAYS_1H)
-        - Ищет уровни (два на дневке, при желании ещё два на 1h)
-        - Сохраняет всё в общий список
-- Склеивает все дневные df_d → df_big, создаёт `MultiSymbolDataset`,
-- Обучает LSTM,
-- Отображает графики 1h (plotly) c 2 дневными уровнями + 2 (например) h1-уровнями.
+1. Подключается к нужному **WebSocket** URL.
+2. Подписывается на **public trade** (либо candles, если нужно).
+3. Приходит массив сделок → вызывает `aggregator.add_trade(...)`.
+4. Когда aggregator закрывает свечу (timeframe истёк), формирует `{open,high,low,close,volume,...}`, optionally печатает/сохраняет.
 
-## 2. Установка и запуск
+На **бэкенде** (Flask/SocketIO) при закрытии свечи делаем `socketio.emit('new_candle', ...)`. Фронтенд ловит это событие → обновляет график TradingView/Chart.js.
 
-Склонировать репозиторий:
+---
+
+## 3. Как получать исторические данные
+
+Скрипты в `core/data_fetcher/bybit.py` (пример) позволяют скачивать **исторические** свечи (REST). При запуске, например:
 
 ```bash
-git clone https://github.com/gribzer/pricelevel-ml.git
 cd pricelevel-ml
+python -m core.data_fetcher.bybit
 ```
 
-Установить зависимости (в venv):
+(или вызов из `main_pipeline.py`). В итоге сохраняете CSV в `data/raw/<symbol>_bybit_1h.csv`.
 
-```bash
-pip install -r requirements.txt
-```
+---
 
-Настроить переменные (при необходимости) в `src/config.py`, например:
+## 4. Поиск уровней (Liquidity Levels)
 
-```python
-BYBIT_CATEGORY = "linear"
-TOP_SYMBOLS = ["BTCUSDT","ETHUSDT",...]
-```
+- `liquidity_levels.py` (или `cluster_levels.py`) + `incremental_fetcher.py` (для Bybit, если остался старый код).
+- Алгоритм:
+        1. Загружаем `df_d` (дневной),
+        2. Находим 2 уровня (support, resist).
+        3. Возможно уточняем 4h, 1h.
+        4. Возвращаем `(d_sup, d_res, h1_sup, h1_res)`.
 
-Запустить:
-
-```bash
-python -m src.main
-```
-
-В консоли будут логи:
-
-- Загрузка данных (если csv нет),
-- Поиск уровней,
-- Обучение модели (эпохи),
-- Вывод финального MSE,
-- Появятся интерактивные окошки Plotly c графиками.
-
-## 3. Пояснения к загрузке данных
-
-### _fetch_bybit_kline_full
-
-- Делает `session.get_kline(category=..., symbol=..., interval=..., start=..., end=..., limit=...)`.
-- Парсит ответ, где list содержит массив шести полей: [openTime, open, high, low, close, volume], актуально для spot и linear.
-- openTime (в мс) идёт в индекс DataFrame.
-- Если Bybit возвращает 181 бар (примерно 6 месяцев для дневок) и last_ts не растёт — значит более старых данных нет, или API вернул ограниченный набор.
-- Защита от бесконечного цикла: если last_ts не увеличивается, break.
-
-Почему last_ts может не расти?
-
-- Bybit может «обрезать» исторические данные. Например, для дневных USDT-перп может возвращать только полгода.
-
-## 4. Поиск уровней
-
-Метод `find_liquid_levels(df)` (в `liquidity_levels.py` или `cluster_levels.py`):
-
-- Находит локальные экстремумы,
-- Считает «очки» уровня (кол-во касаний, ложные пробои, объём и т.д.),
-- Отбирает 2 ближайших (support, resistance).
-
-Пример кода (упрощённо):
-
-```python
-def find_liquid_levels(df):
-                # 1) daily_atr= ...
-                # 2) собираем raw_levels (экстремумы)
-                # 3) score_levels -> оставляем top
-                # 4) pick_best_two_levels -> (support, resist)
-                return support_level, resistance_level
-```
+---
 
 ## 5. Обучение модели
 
-- Формируется df_big (из дневных df по разным символам), добавляются колонки symbol_id.
-- `MultiSymbolDataset`:
-        - Разбивает временной ряд на (seq_len,1) вход, + symbol_id, → предсказываем close.
-        - train/test split (или random_split).
-- `MultiSymbolLSTM` (LSTM вход = concat(close, embedding(symbol))) → FC.
-- `train_model_multi`:
-        - Optim=Adam, Loss=MSE, num_epochs=150 (к примеру).
+В `core/models/train.py`:
 
-Лог показывает уменьшение MSE:
+- `MultiSymbolLSTM` (пример),
+- `train_model_multi(...)`,
+- `evaluate_model_multi(...)`.
 
-```plaintext
-[Epoch 1/150] Train MSE=0.07, Val=0.08
-...
-[Epoch 150/150] Train MSE=0.0003, Val=0.0001
-[Test] MSE=0.0001
+В `core/pipeline/main_pipeline.py` вы делаете:
+
+- Сбор исторических дневных df,
+- `MultiSymbolDataset(...)`,
+- `train_model_multi(...)`,
+- MSE → вывод.
+
+---
+
+## 6. Запуск “всего” проекта
+
+### 6.1. Шаги
+
+1. **Установить** зависимости:
+
+        ```bash
+        pip install -r requirements.txt
+        ```
+
+2. **Запустить** бэкенд (WS + SocketIO) + фоновый сбор Bybit/BingX/HTX: В консоли увидите логи:
+
+        ```bash
+        cd pricelevel-ml
+        python -m backend.server
+        ```
+
+        ```csharp
+        [BybitWSClient] Subscribed => BTCUSDT
+        [BingXWSClient] Opened => ...
+        [HTXWSClient] ...
+        * Serving Flask app 'server'
+        ...
+        ```
+
+3. **Открыть** браузер `http://127.0.0.1:8000/` (или другой порт), который отдаёт `webapp/tradingview/index.html`.
+4. Если всё корректно, по мере прихода сделок будут формироваться свечи, и `new_candle` будет отправляться фронту. TradingView Lightweight Charts обновится.
+
+### 6.2. Отдельное обучение на истории
+
+```bash
+cd pricelevel-ml
+python -m core.pipeline.main_pipeline
 ```
 
-Значит, модель фактически «очень хорошо» предсказала close на историческом отрезке (с учётом нормировки, etc.).
+(где `main_pipeline.py` качает исторические данные, формирует DataFrame, вызывает `train.py`, и т.д.)
 
-## 6. Вывод графиков
+---
 
-В конце `main.py` для каждого символа:
+## 7. TradingView / Chart.js / Highcharts
 
-- Берётся 1h df,
-- Plotly Candlestick:
+В папке `webapp/tradingview/`:
 
-```python
-go.Candlestick(
-         x=df_1h.index,
-         open=df_1h["open"],
-         high=df_1h["high"],
-         low= df_1h["low"],
-         close=df_1h["close"],
-)
-```
+- **`index.html`**: Подключает `lightweight-charts`, `socket.io`, создаёт candlestickSeries.
+- При получении события `'new_candle'` (через SocketIO) → парсит JSON → `bars.push(bar)`, `series.setData(bars)`.
 
-- Добавляются `fig.add_hline(y=d_sup,...)` и `fig.add_hline(y=d_res,...)`.
-- Если df_1h имеет уникальный datetime (и не пустой), появится нормальный свечной график.
+Если вместо TradingView вы используете Chart.js или Highcharts, логика та же: JS + WebSocket → обновляете график.
 
-## 7. Типовые проблемы
+---
 
-- invalid literal for int(): '...some float...'
+## 8. Частые проблемы
 
-- last_ts не растёт => break
+1. **ModuleNotFoundError**: Нужно запускать `python -m backend.server` из корневой папки (`pricelevel-ml`) + `__init__.py` файлы в папках.
+2. **Connection is already closed**: Bybit/BingX иногда рвут WS, нужно автопереподключение.
+3. **График пуст**: Возможно нет сделок (testnet?), timeframe слишком большой, или не рассылаете `new_candle`.
+4. **MSE слишком маленькое**: Нормально для нормированных данных. Смотрите реальную (денежную) ошибку.
+5. **“handler not found”** (Bybit) / “invalid start byte”** (gzip)**: Нужно правильно подписываться, распаковывать gzip.
 
-Bybit API ограничивает глубину или возвращает однообразные timestamps.
+---
 
-- Model MSE очень маленькое (0.0001)
+## 9. Итого
 
-Это нормально на нормированных данных. Проверять реальную ошибку в долларах, возможно:
+Проект **pricelevel-ml** теперь:
 
-- Plotly рисует не свечи, а «столбики»
+1. Имеет **многобиржевой** сбор данных: Bybit, BingX, HTX.
+2. **В реальном времени** формирует свечи, может обучать (дообучать) модель LSTM.
+3. Выводит графики на **TradingView Lightweight** (HTML+JS), либо Chart.js / Highcharts, а также может предоставлять **Dash** панели.
 
-Убедитесь, что `df.index` — DatetimeIndex без дублей, `go.Candlestick` + `x= df.index`.
-
-## 8. Резюме
-
-Таким образом, pricelevel-ml позволяет:
-
-- Инкрементально скачать OHLCV с Bybit v5, (поддержка spot/linear).
-- Найти 2 ключевых уровня (поддержка, сопротивление) на дневном TF, опционально уточнить 1h.
-- Обучить простую LSTM-модель на собранных данных (дневных).
-- Построить интерактивные графики (4h или 1h), отметив уровни.
-
-При запуске `python -m src.main` в консоли вы увидите логи загрузки, обучения и появятся интерактивные окна Plotly
+Это даёт гибкую основу для экспериментов с детектированием ценовых уровней, обучением ML-моделей и реальным потоком рыночных данных.
