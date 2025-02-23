@@ -11,3 +11,5 @@ plotly
 jupyter
 dotenv
 dash
+flask-socketio
+websocket-client

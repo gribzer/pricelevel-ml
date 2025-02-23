@@ -1,37 +1,21 @@
 # core/config.py
 import os
-import datetime
 
+# === API keys ===
 BYBIT_API_KEY = os.getenv("BYBIT_API_KEY", "")
 BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET", "")
 
-# Список инструментов (линейные USDT) — можно менять
-TOP_SYMBOLS = [
-    "BTCUSDT",
-    "ETHUSDT"
-]
+BINGX_API_KEY = os.getenv("BINGX_API_KEY", "")
+BINGX_API_SECRET = os.getenv("BINGX_API_SECRET", "")
 
-# ВНИМАНИЕ: для publicTrade линейного / инверсного WS в pybit v5 используем "linear"
-CHANNEL_TYPE = "linear"
+HTX_API_KEY = os.getenv("HTX_API_KEY", "")
+HTX_API_SECRET = os.getenv("HTX_API_SECRET", "")
 
-# Параметры для history fetch (дневные, 4ч, 1ч) — если используете incremental_fetcher
-DAYS_D  = 180  
-DAYS_4H = 90   
-DAYS_1H = 30   
+# === Endpoints (WS) ===
+BYBIT_CHANNEL_TYPE = "linear"  # или "inverse"
+IS_BYBIT_TESTNET = False
+BINGX_WS_ENDPOINT = "wss://open-api-swap.bingx.com/swap-market"
+HTX_WS_ENDPOINT   = "wss://api.huobi.pro/ws"
 
-today = datetime.date.today()
-delta_6m = datetime.timedelta(days=180)
-start_dt = today - delta_6m
-end_dt   = today
-
-BYBIT_START_DATE = start_dt.strftime("%Y-%m-%d")
-BYBIT_END_DATE   = end_dt.strftime("%Y-%m-%d")
-
-print(f"[CONFIG] Сегодня: {today}, диапазон: {BYBIT_START_DATE}..{BYBIT_END_DATE}")
-
-RAW_DATA_PATH = "data/raw"
-PROCESSED_DATA_PATH = "data/processed"
-
-NUM_EPOCHS = 150
-BATCH_SIZE = 64
-LEARNING_RATE = 0.0003
+# === Other settings ===
+TIMEFRAME_SECONDS = 60  # пусть по умолчанию 1m
