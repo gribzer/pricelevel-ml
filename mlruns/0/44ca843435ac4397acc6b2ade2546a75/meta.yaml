@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/44ca843435ac4397acc6b2ade2546a75/artifacts
+end_time: 1740266844738
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 44ca843435ac4397acc6b2ade2546a75
+run_name: clean-lark-983
+run_uuid: 44ca843435ac4397acc6b2ade2546a75
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740266843793
+status: 4
+tags: []
+user_id: webse

@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/c77af572029547bfbafe86b51d881743/artifacts
+end_time: 1740266707498
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: c77af572029547bfbafe86b51d881743
+run_name: omniscient-wasp-930
+run_uuid: c77af572029547bfbafe86b51d881743
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740266701275
+status: 3
+tags: []
+user_id: webse

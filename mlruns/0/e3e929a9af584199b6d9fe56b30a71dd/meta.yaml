@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/e3e929a9af584199b6d9fe56b30a71dd/artifacts
+end_time: 1740266435062
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: e3e929a9af584199b6d9fe56b30a71dd
+run_name: inquisitive-crab-626
+run_uuid: e3e929a9af584199b6d9fe56b30a71dd
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740266434922
+status: 4
+tags: []
+user_id: webse

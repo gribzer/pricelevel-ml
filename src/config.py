@@ -1,14 +1,15 @@
-# src/config.py
+# config.py
 
 import os
+import datetime
 
-# -------------------------------------------------
-# Параметры для Bybit (Unified v5)
-# -------------------------------------------------
 BYBIT_API_KEY = os.getenv("BYBIT_API_KEY", "")
 BYBIT_API_SECRET = os.getenv("BYBIT_API_SECRET", "")
 
-# Топ-10 крипто (пример)
+# ================================
+# Последние 6 месяцев
+# ================================
+
 TOP_SYMBOLS = [
     "BTCUSDT",
     "ETHUSDT",
@@ -20,39 +21,33 @@ TOP_SYMBOLS = [
     "LTCUSDT",
 ]
 
-BYBIT_CATEGORY = "spot"   # или "linear" для USDT-перп
+BYBIT_CATEGORY = "linear"  # или "linear" для фьючерсов
 
+# Периоды загрузки:
+DAYS_D  = 180  # дневной  ~6 мес
+DAYS_4H = 90   # 4ч      ~3 мес
+DAYS_1H = 30   # часовой ~1 мес
 
-# Укажем разные интервалы: D, 4h (240), 1h (60)
-DAILY_INTERVAL = "D"
-H4_INTERVAL    = "240"
-H1_INTERVAL    = "60"
+# == Автоматически берём последние 6 месяцев относительно "сегодня"
+today = datetime.date.today()
+delta_6m = datetime.timedelta(days=180)
+start_dt = today - delta_6m
+end_dt   = today
 
-BYBIT_START_DATE = "2024-01-01"
-BYBIT_END_DATE   = "2025-01-20"
+BYBIT_START_DATE = start_dt.strftime("%Y-%m-%d")
+BYBIT_END_DATE   = end_dt.strftime("%Y-%m-%d")
 
-# -------------------------------------------------
-# Пути к данным
-# -------------------------------------------------
+print(f"[CONFIG] Сегодня: {today}, диапазон: {BYBIT_START_DATE}..{BYBIT_END_DATE}")
+
 RAW_DATA_PATH = "data/raw"
 PROCESSED_DATA_PATH = "data/processed"
 
-# ====== Параметры поиска уровней ======
-EPS_PERCENT = 0.005
-MIN_SAMPLES = 4
-WINDOW_SIZE = 12
-MIN_TOUCHES_FILTER = 4
-MAX_AGE_DAYS = 90
-ATR_BUFFER = 0.20
-VOLUME_FACTOR = 1.3
+# Периоды в днях:
+DAYS_D  = 180  # дневной
+DAYS_4H = 90   # 4h
+DAYS_1H = 30   # 1h
 
-# ====== Параметры модели (LSTM) ======
-INPUT_SIZE = 1
-HIDDEN_SIZE = 128
-NUM_LAYERS = 3
-OUTPUT_SIZE = 1
-LEARNING_RATE = 0.0003
-NUM_EPOCHS = 80
+# Параметры обучения:
+NUM_EPOCHS = 150
 BATCH_SIZE = 64
-SEQ_LEN = 80
-EMB_DIM = 8
+LEARNING_RATE = 0.0003

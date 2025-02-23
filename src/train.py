@@ -3,85 +3,83 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-import mlflow
-import mlflow.pytorch
-import numpy as np
-from sklearn.metrics import precision_score, recall_score, f1_score
 
-from .model import MultiSymbolLSTM
+class MultiSymbolLSTM(nn.Module):
+    def __init__(self, num_symbols,
+                 input_size=1, hidden_size=128, num_layers=2,
+                 output_size=1, emb_dim=8, dropout=0.2):
+        super().__init__()
+        self.symbol_emb= nn.Embedding(num_symbols, emb_dim)
+        self.lstm= nn.LSTM(input_size+emb_dim, hidden_size,
+                           num_layers=num_layers, batch_first=True,
+                           dropout=dropout)
+        self.fc= nn.Linear(hidden_size, output_size)
 
-def train_model_multi(
-    train_dataset,
-    val_dataset,
-    num_symbols,
-    device='cpu',
-    learning_rate=0.0003,
-    num_epochs=50,
-    batch_size=64
-):
-    model=MultiSymbolLSTM(num_symbols=num_symbols).to(device)
-    criterion=nn.BCELoss()
-    optimizer=torch.optim.Adam(model.parameters(), lr=learning_rate)
+    def forward(self, x_seq, sym_id):
+        """
+        x_seq: (batch, seq_len, 1)
+        sym_id: (batch,)
+        out => (batch,1)
+        """
+        b, s, _= x_seq.shape
+        emb= self.symbol_emb(sym_id)   # (b, emb_dim)
+        emb_exp= emb.unsqueeze(1).repeat(1, s, 1) # => (b, s, emb_dim)
+        combined= torch.cat((x_seq, emb_exp), dim=2) # (b, s, input_size+emb_dim)
+        out, _= self.lstm(combined)
+        last_out= out[:,-1,:]   # (b, hidden_size)
+        y= self.fc(last_out)    # (b,1)
+        return y
 
-    train_loader=DataLoader(train_dataset,batch_size=batch_size,shuffle=True)
-    val_loader=DataLoader(val_dataset,batch_size=batch_size,shuffle=False)
 
-    with mlflow.start_run():
-        mlflow.log_param("learning_rate",learning_rate)
-        mlflow.log_param("batch_size",batch_size)
-        mlflow.log_param("epochs",num_epochs)
-        mlflow.log_param("num_symbols",num_symbols)
+def train_model_multi(train_ds, val_ds,
+                      num_symbols,
+                      device='cpu',
+                      learning_rate=0.0003,
+                      num_epochs=50,
+                      batch_size=64):
+    model= MultiSymbolLSTM(num_symbols,
+                           input_size=1, hidden_size=128, num_layers=2,
+                           output_size=1, emb_dim=8, dropout=0.2).to(device)
+    criterion= nn.MSELoss()
+    optimizer= torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        for epoch in range(num_epochs):
-            model.train()
-            total_loss=0.0
-            for x_seq, sym_id, y in train_loader:
-                x_seq=x_seq.to(device)
-                sym_id=sym_id.to(device)
-                y=y.to(device)
+    train_loader= DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader  = DataLoader(val_ds,   batch_size=batch_size, shuffle=False)
 
-                optimizer.zero_grad()
-                outputs=model(x_seq, sym_id)
-                loss=criterion(outputs.squeeze(), y)
-                loss.backward()
-                optimizer.step()
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss=0; count=0
+        for x_seq, sym_id, y in train_loader:
+            x_seq= x_seq.to(device)
+            sym_id= sym_id.to(device)
+            y= y.to(device)               # shape (b,1)
+            optimizer.zero_grad()
+            out= model(x_seq, sym_id)     # (b,1)
+            loss= criterion(out, y)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()* len(y)
+            count += len(y)
 
-                total_loss+=loss.item()
+        train_mse= total_loss/count if count>0 else 0
+        val_mse= evaluate_model_multi(model,val_loader,device)
+        print(f"[Epoch {epoch+1}/{num_epochs}] Train MSE: {train_mse:.4f}, Val MSE={val_mse:.4f}")
 
-            avg_loss=total_loss/len(train_loader)
-            print(f"[Epoch {epoch+1}/{num_epochs}] Train Loss: {avg_loss:.4f}")
-            mlflow.log_metric("train_loss",avg_loss,step=epoch)
-
-            if val_loader and (epoch+1)%5==0:
-                acc, prec, rec, f1=evaluate_model_multi(model,val_loader,device)
-                mlflow.log_metric("val_accuracy",acc,step=epoch)
-                mlflow.log_metric("val_precision",prec,step=epoch)
-                mlflow.log_metric("val_recall",rec,step=epoch)
-                mlflow.log_metric("val_f1",f1,step=epoch)
-
-        mlflow.pytorch.log_model(model,artifact_path="models")
-        print("Модель сохранена в MLflow.")
     return model
 
 def evaluate_model_multi(model, data_loader, device='cpu'):
     model.eval()
-    all_preds=[]
-    all_labels=[]
+    criterion= nn.MSELoss(reduction='sum')
+    total=0; n=0
     with torch.no_grad():
         for x_seq, sym_id, y in data_loader:
-            x_seq=x_seq.to(device)
-            sym_id=sym_id.to(device)
-            y=y.to(device)
-            outputs=model(x_seq, sym_id)
-            preds=(outputs.squeeze()>=0.5).long()
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(y.cpu().numpy())
-
-    all_preds=np.array(all_preds)
-    all_labels=np.array(all_labels)
-    accuracy=(all_preds==all_labels).mean()
-    precision=precision_score(all_labels,all_preds,zero_division=0)
-    recall=recall_score(all_labels,all_preds,zero_division=0)
-    f1=f1_score(all_labels,all_preds,zero_division=0)
-    print(f"Val Accuracy={accuracy:.4f}, Precision={precision:.4f}, Recall={recall:.4f}, F1={f1:.4f}")
-    return accuracy, precision, recall, f1
+            x_seq= x_seq.to(device)
+            sym_id= sym_id.to(device)
+            y= y.to(device)
+            out= model(x_seq, sym_id)
+            loss= criterion(out, y)
+            total+= loss.item()
+            n+= len(y)
+    if n==0: return 0
+    mse= total/n
+    return mse

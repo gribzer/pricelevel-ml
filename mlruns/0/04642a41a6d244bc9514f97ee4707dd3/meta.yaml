@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/webse/YandexDisk/Dev/pricelevel-ml/mlruns/0/04642a41a6d244bc9514f97ee4707dd3/artifacts
+end_time: 1740269526411
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 04642a41a6d244bc9514f97ee4707dd3
+run_name: unleashed-smelt-534
+run_uuid: 04642a41a6d244bc9514f97ee4707dd3
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1740269517254
+status: 3
+tags: []
+user_id: webse

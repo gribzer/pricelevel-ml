@@ -1,311 +1,236 @@
-# Техническая документация
+# Проект pricelevel-ml
 
-Ниже представлена техническая документация по проекту, который обучает одну модель (LSTM) сразу на нескольких криптовалютных инструментах с учётом мультитаймфрейма, а также выполняет бэктест и визуализацию уровней поддержки/сопротивления. Документация раскрывает логику модулей, структуру данных, процесс обучения, а также даёт пояснения по запуску и расширению проекта.
+pricelevel-ml — это Python-проект для:
 
-## Общий обзор
+- Загрузки исторических данных (свечей OHLCV) по ряду инструментов (крипто) с помощью Bybit API (Unified v5).
+- Определения ключевых ценовых уровней (поддержка/сопротивление) на разных таймфреймах (D, 4h, 1h).
+- Обучения простой LSTM-модели (пример) на данных дневного таймфрейма (или другом), чтобы предсказывать (в демо-версии) close.
+- Отрисовки интерактивных графиков (Plotly) с отмеченными уровнями.
 
-Проект решает задачу автоматизированного определения ключевых уровней (поддержки/сопротивления) на рынке криптовалют, используя:
+Проект рассчитан на демонстрацию подхода:
 
-- Мультитаймфреймовый анализ: дневные (D), 4-часовые (H4) и 1-часовые (H1) свечи.
-- Глубокое обучение (LSTM-модель), которая учится на нескольких инструментах сразу (например, топ-10 криптовалют) и позволяет совместно анализировать общие паттерны.
-- Кластеризацию локальных экстремумов для вычленения потенциальных уровней.
-- Бэктест (упрощённый), чтобы визуально оценить, как формирующиеся уровни коррелируют с сигналами входа/выхода.
+- инкрементальная подгрузка данных
+- нахождение «двух» ближайших к цене уровней (поддержка, сопротивление)
+- простая модель (LSTM) на PyTorch
 
-Проект состоит из нескольких модулей в папке `src/`, которые совместно образуют конвейер (pipeline):
+## 1. Структура проекта
 
-- `config.py`: Хранит гиперпараметры, списки инструментов, даты, настройки обучения и т.д.
-- `data_fetcher.py`: Логика загрузки исторических данных с Bybit (Unified v5 API) для отдельных таймфреймов.
-- `cluster_levels.py`: Методы нахождения локальных экстремумов и кластеризации уровней (например, DBSCAN).
-- `multi_tf_analysis.py`: Дополнительные функции анализа (например, filter_levels), учитывающие разные таймфреймы.
-- `dataset.py`: Описание PyTorch Dataset, который собирает признаки (close, symbol_id) и метки (level_label).
-- `model.py`: Модель глубинного обучения (MultiSymbolLSTM), которая принимает на вход и цены, и идентификатор инструмента (embedding).
-- `train.py`: Функции обучения модели (train_model_multi) и валидации (evaluate_model_multi).
-- `backtest.py`: Код для упрощённого бэктеста сигналов (run_backtest) и их отрисовки (plot_backtest_results).
-- `main.py`: Основной скрипт (pipeline), который:
-  - Загружает данные для нескольких символов;
-    - Находит уровни, ставит метки;
-    - Создаёт общий Dataset;
-    - Обучает модель на GPU;
-    - Выполняет бэктест и рисует результаты.
-
-## Структура проекта
-
-Предположим, что каталог выглядит так:
+Дерево:
 
 ```plaintext
 pricelevel-ml/
 ├── src/
 │   ├── __init__.py
 │   ├── config.py
-│   ├── data_fetcher.py
-│   ├── cluster_levels.py
-│   ├── multi_tf_analysis.py
+│   ├── incremental_fetcher.py
+│   ├── liquidity_levels.py
+│   ├── cluster_levels.py     (при необходимости)
 │   ├── dataset.py
-│   ├── model.py
 │   ├── train.py
-│   ├── backtest.py
-│   ├── main.py
-│   └── run_pretrained.py   (необязательно, если используется)
+│   ├── main.py               (главный entry point)
+│   ├── ...
 ├── data/
-│   ├── raw/
+│   ├── raw/                  (csv-файлы с сырыми свечами)
 │   └── processed/
-├── venv/ (или другая виртуализация)
 ├── requirements.txt
+├── README.md (или docs)
 └── ...
 ```
 
-- `data/raw/` используется для кэширования CSV с историческими свечами.
-- `data/processed/` может хранить уже агрегированные/предобработанные данные.
-- `venv/` – виртуальное окружение Python (необязательно, но рекомендуется).
+### Основные модули
 
-## Зависимости (requirements)
+#### config.py
 
-Пример списка пакетов, необходимых для работы:
+Содержит глобальные параметры:
 
-- python >= 3.8
-- torch >= 1.13 (с поддержкой CUDA, если нужно обучение на GPU)
-- pandas >= 1.3
-- numpy >= 1.21
-- mlflow >= 2.2
-- scikit-learn >= 1.0
-- plotly >= 5.6
-- pybit >= 2.0 (Unified Trading API)
-- requests, tqdm (при необходимости)
+- BYBIT_CATEGORY ("spot" или "linear")
+- TOP_SYMBOLS (список: "BTCUSDT", "ETHUSDT" ...)
+- Периоды: DAYS_D (сколько дней назад для дневок), DAYS_4H (для 4h), DAYS_1H (для 1h)
+- Параметры обучения: NUM_EPOCHS, BATCH_SIZE, LEARNING_RATE и др.
 
-В файле `requirements.txt` можно задать точные версии. Пример:
+#### incremental_fetcher.py
 
-```ini
-torch==1.13.1
-pandas==1.5.3
-numpy==1.23.5
-scikit-learn==1.2.1
-plotly==5.11.0
-pybit==2.2.1
-mlflow==2.3.2
-```
+Модуль, в котором реализована логика загрузки свечей в CSV-файл. Главная функция — `load_kline_incremental(...)`, которая:
 
-## Файл config.py
+- Проверяет, есть ли уже CSV
+- Если нет, скачивает всё (`_fetch_bybit_kline_full`)
+- Если есть, догружает недостающее справа,
+- Возвращает DataFrame за запрошенный период.
 
-Этот модуль содержит глобальные параметры, которые контролируют проект. Например:
+Здесь же находится `_fetch_bybit_kline_full` — функция «глубокой» выгрузки с помощью Bybit v5. Важно:
 
-```python
-BYBIT_API_KEY = ...
-BYBIT_API_SECRET = ...
+- Обрабатывает category=="spot" и category=="linear"
+- Парсит ответ массива [openTime, open, high, low, close, volume]
+- Защита от зацикливания, если last_ts не растёт
+- Складывает всё в DataFrame (open_time → DatetimeIndex).
 
-TOP_SYMBOLS = [
-        "BTCUSDT", "ETHUSDT", "BNBUSDT", ...
-]
+#### liquidity_levels.py
 
-BYBIT_CATEGORY = "spot"      # либо "linear"
-DAILY_INTERVAL = "D"         # день
-H4_INTERVAL = "240"          # 4 часа
-H1_INTERVAL = "60"           # 1 час
-BYBIT_START_DATE = "2023-01-01"
-BYBIT_END_DATE   = "2025-01-01"
+Логика, объединяющая:
 
-RAW_DATA_PATH = "data/raw"
-PROCESSED_DATA_PATH = "data/processed"
+- вызов `load_kline_incremental(symbol, category, interval, ...)` для дневного / 4h / 1h,
+- функции `find_liquid_levels` (которую вы можете взять из `find_liquid_core` или `cluster_levels`) для определения двух уровней (support/resistance).
 
-EPS_PERCENT = 0.005
-MIN_SAMPLES = 4
-WINDOW_SIZE = 12
-MIN_TOUCHES_FILTER = 4
-MAX_AGE_DAYS = 90
-ATR_BUFFER = 0.20
-VOLUME_FACTOR = 1.3
+#### dataset.py
 
-INPUT_SIZE = 1
-HIDDEN_SIZE = 128
-NUM_LAYERS = 3
-OUTPUT_SIZE = 1
-LEARNING_RATE = 0.0003
-NUM_EPOCHS = 80
-BATCH_SIZE = 64
-SEQ_LEN = 80
-EMB_DIM = 8
-```
+Определяет класс `MultiSymbolDataset`, который:
 
-- `TOP_SYMBOLS` — список криптовалют, для которых будет загружаться история.
-- `BYBIT_CATEGORY` — "spot" или "linear" (USDT-перп).
-- `(DAILY_INTERVAL, H4_INTERVAL, H1_INTERVAL)` — интервалы свечей.
-- Параметры кластеризации (`EPS_PERCENT, WINDOW_SIZE ...`) — влияют на алгоритм поиска уровней.
-- Параметры LSTM-модели (`HIDDEN_SIZE, NUM_LAYERS и т.д.`) — влияют на архитектуру сети.
+- Формирует выборку (seq_len исторических цен → предсказываем target),
+- Нормирует признаки (min/max) (необязательно),
+- Возвращает (x_seq, symbol_id, y).
 
-## Файл data_fetcher.py
+#### train.py
 
-Здесь описано, как качаются данные с Bybit через pybit (Unified v5). Вариант реализации:
+- Модель `MultiSymbolLSTM` (LSTM + Embedding символа),
+- Функции `train_model_multi`, `evaluate_model_multi`.
 
-- Функция `_fetch_bybit_kline(...)`: скачивает котировки для заданного символа, интервала и дат (start, end).
-- Функция `load_single_symbol_multi_timeframe(symbol, ...)`: трижды вызывает `_fetch_bybit_kline`, получая `df_daily`, `df_4h`, `df_1h`.
+#### main.py
 
-Например:
+Главный entry point. Логика:
 
-```python
-def load_single_symbol_multi_timeframe(symbol, 
-                                                                             category=BYBIT_CATEGORY,
-                                                                             start=BYBIT_START_DATE,
-                                                                             end=BYBIT_END_DATE,
-                                                                             daily_interval=DAILY_INTERVAL,
-                                                                             h4_interval=H4_INTERVAL,
-                                                                             h1_interval=H1_INTERVAL):
-        """
-        Возвращает (df_daily, df_4h, df_1h) для одного инструмента.
-        """
-        df_d  = _fetch_bybit_kline(...)
-        df_4h = _fetch_bybit_kline(...)
-        df_1h = _fetch_bybit_kline(...)
-        return df_d, df_4h, df_1h
-```
+- Для каждого символа из TOP_SYMBOLS:
+        - Запрашивает дневные, 4h, 1h данные (последние DAYS_D, DAYS_4H, DAYS_1H)
+        - Ищет уровни (два на дневке, при желании ещё два на 1h)
+        - Сохраняет всё в общий список
+- Склеивает все дневные df_d → df_big, создаёт `MultiSymbolDataset`,
+- Обучает LSTM,
+- Отображает графики 1h (plotly) c 2 дневными уровнями + 2 (например) h1-уровнями.
 
-## Файл cluster_levels.py
+## 2. Установка и запуск
 
-Реализует поиск локальных экстремумов и их кластеризацию.
-
-- `find_local_extrema(prices, window)`: находит индексы и цены локальных максимумов/минимумов в окне ±window.
-- `cluster_extrema(maxima, minima, eps_frac, min_samples)`: объединяет точки (цены экстремумов) в кластеры (например, DBSCAN), возвращая список средних цен кластеров.
-- `make_binary_labels(df, levels, threshold_frac=0.001)`: формирует бинарную метку (1, если close в пределах threshold_frac * close от одного из уровней).
-
-## Файл multi_tf_analysis.py
-
-Описывает дополнительные функции анализа, учитывающие разные ТФ:
-
-- `compute_atr(df_daily, period=7)`: простой ATR по дневному фрейму.
-- `filter_levels(df_daily, df_4h, df_1h, raw_levels, ...)`:
-  - Базовая логика: проверить касания на дневном ТФ, возраст уровня, объёмы на 4h, скорость подхода на 1h и т.д.
-    - Возвращает список «отфильтрованных» уровней.
-
-## Файл dataset.py
-
-Здесь задаётся PyTorch Dataset, который собирает последовательности (для LSTM) и метки. Для мультиинструментного обучения используют класс `MultiSymbolDataset`:
-
-```python
-class MultiSymbolDataset(Dataset):
-        def __init__(self, df, seq_len=SEQ_LEN):
-                # Сохраняем df["close"], df["symbol_id"], df["level_label"]
-                # ...
-        def __getitem__(self, idx):
-                # Возвращаем (seq_close, symbol_id, label)
-```
-
-## Файл model.py
-
-Хранит LSTM-модель с учётом `symbol_id`:
-
-```python
-class MultiSymbolLSTM(nn.Module):
-        def __init__(self, num_symbols, ...):
-                # self.symbol_emb = nn.Embedding(num_symbols, emb_dim)
-                # self.lstm = nn.LSTM(input_size+emb_dim, hidden_size, ...)
-                # self.fc = nn.Linear(...)
-                # ...
-        def forward(self, seq_close, symbol_id):
-                # embedding(symbol_id) => concat => lstm => fc => sigmoid
-```
-
-## Файл train.py
-
-Описывает процесс обучения и валидации:
-
-```python
-def train_model_multi(train_dataset, val_dataset, num_symbols, device='cpu'):
-        model = MultiSymbolLSTM(num_symbols).to(device)
-        # ...
-        with mlflow.start_run():
-                # for epoch in range(NUM_EPOCHS):
-                #   ...
-                #   loss.backward()
-                #   ...
-                # mlflow.pytorch.log_model(model, "models")
-        return model
-```
-
-MLflow используется для логирования параметров (learning_rate, batch_size, epochs) и метрик (train_loss, val_accuracy и т.д.), а также для сохранения модели.
-
-```python
-def evaluate_model_multi(model, data_loader, device='cpu'):
-        # Проходит по батчам, вычисляет accuracy, precision, recall, f1.
-        # ...
-```
-
-## Файл backtest.py
-
-Содержит функции для упрощённого бэктеста сигналов:
-
-- `run_backtest(df, levels=None, initial_capital=10000.0)`:
-  - Предполагается, что в `df` есть колонка `signal` (1 => Buy, -1 => Sell).
-    - Итог: возвращает DataFrame с `trade_price`, список сделок `trades`, и `eq_curve` (equity во времени).
-
-- `plot_backtest_results(df, trades, eq_curve, levels=None, title="")`:
-  - Использует Plotly.
-    - Рисует свечи OHLC, точки покупок/продаж, опционально горизонтальные линии `levels`, и снизу кривую капитала.
-
-## Файл main.py
-
-Главный скрипт, в котором:
-
-- Загружаются несколько инструментов (из `config.TOP_SYMBOLS`).
-- Для каждого:
-  - Вызываются `load_single_symbol_multi_timeframe(...)` → `(df_d, df_4h, df_1h)`.
-    - На `df_d` ищутся экстремумы → получаем `raw_levels` → фильтруем через `filter_levels(df_d, df_4h, df_1h, raw_levels)`.
-    - Формируем `level_label`.
-    - Помечаем `df_d["symbol_id"]`, складываем в общий `df_big`.
-- Создаём `MultiSymbolDataset` из `df_big`.
-- Разделяем на train/val/test, вызываем `train_model_multi(...)`.
-- Проводим валидацию (`evaluate_model_multi`).
-- Для каждого символа отдельно создаём бэктест: упрощённая логика сигналов (`level_label` => `signal`), и рисуем график.
-- В конце выводится серия графиков, по одному на символ.
-
-## Запуск и использование
-
-Чтобы запустить проект:
-
-1. Установите зависимости (см. `requirements.txt`).
-2. Создайте виртуальное окружение:
+Склонировать репозиторий:
 
 ```bash
-python -m venv venv
-source venv/bin/activate   # или .\venv\Scripts\activate в Windows
+git clone https://github.com/gribzer/pricelevel-ml.git
+cd pricelevel-ml
+```
+
+Установить зависимости (в venv):
+
+```bash
 pip install -r requirements.txt
 ```
 
-1. Настройте (при необходимости) переменные среды `BYBIT_API_KEY`, `BYBIT_API_SECRET` (или оставьте пустыми, если нужны только публичные данные).
-2. Запустите:
+Настроить переменные (при необходимости) в `src/config.py`, например:
+
+```python
+BYBIT_CATEGORY = "linear"
+TOP_SYMBOLS = ["BTCUSDT","ETHUSDT",...]
+```
+
+Запустить:
 
 ```bash
 python -m src.main
 ```
 
-Если CUDA доступна, код отобразит `Используем устройство: cuda`.
+В консоли будут логи:
 
-Произойдёт скачивание данных, поиск уровней, обучение, бэктест.
+- Загрузка данных (если csv нет),
+- Поиск уровней,
+- Обучение модели (эпохи),
+- Вывод финального MSE,
+- Появятся интерактивные окошки Plotly c графиками.
 
-## Результаты
+## 3. Пояснения к загрузке данных
 
-В MLflow (если запущен через `mlflow ui`) вы увидите новую запись (Run), где есть:
+#### _fetch_bybit_kline_full
 
-- Параметры обучения (learning_rate, batch_size, epochs).
-- Метрики (train_loss, val_accuracy и т.д.).
-- Сохранённая модель (artifact_path="models").
+- Делает `session.get_kline(category=..., symbol=..., interval=..., start=..., end=..., limit=...)`.
+- Парсит ответ, где list содержит массив шести полей: [openTime, open, high, low, close, volume], актуально для spot и linear.
+- openTime (в мс) идёт в индекс DataFrame.
+- Если Bybit возвращает 181 бар (примерно 6 месяцев для дневок) и last_ts не растёт — значит более старых данных нет, или API вернул ограниченный набор.
+- Защита от бесконечного цикла: если last_ts не увеличивается, break.
 
-В консоли и в окне Plotly будут показаны графики бэктеста (candlestick + уровни + сигналы) для каждого инструмента.
+Почему last_ts может не расти?
 
-## Расширение и настройка
+- Bybit может «обрезать» исторические данные. Например, для дневных USDT-перп может возвращать только полгода.
 
-- Добавить больше инструментов: нужно лишь расширить `TOP_SYMBOLS` в `config.py`.
-- Ускорить скачивание: при большом числе символов, API Bybit можно «задушить». Возможно, стоит добавить параллелизм или кэширование CSV для 4h/1h.
-- Сложная логика сигналов: вместо `df["level_label"]` => `signal=1`, можно использовать обученную модель (LSTM) для предсказания вероятности пробоя/отбоя уровня и генерировать `signal` на основе `p >= threshold`.
-- Улучшить фильтрацию: в `filter_levels` добавить более точный учёт объёмов/ATR, ретестов, фитилей и т.д.
-- Регуляризация: если модель переобучается, можно добавить dropout, early stopping, уменьшить `HIDDEN_SIZE` и т.д.
-- Docker: при необходимости запаковать всё в Docker-образ, автоматизировать запуск.
+## 4. Поиск уровней
 
-## Вывод
+Метод `find_liquid_levels(df)` (в `liquidity_levels.py` или `cluster_levels.py`):
 
-Данный проект даёт сквозной пример:
+- Находит локальные экстремумы,
+- Считает «очки» уровня (кол-во касаний, ложные пробои, объём и т.д.),
+- Отбирает 2 ближайших (support, resistance).
 
-- Сбор данных (мультисет, несколько таймфреймов).
-- Поиск уровней (экстремумы + кластеризация + фильтры).
-- Обучение единой RNN-модели сразу на нескольких криптоинструментах.
-- Логирование (MLflow).
-- Бэктест (Candlestick + сигналы) для визуального контроля.
+Пример кода (упрощённо):
 
-Благодаря гибкой структуре, можно быстро менять логику (параметры уровней, архитектуру модели, стратегию сигналов) и тестировать гипотезы о трейдинге и анализе уровней на разных рынках.
+```python
+def find_liquid_levels(df):
+                # 1) daily_atr= ...
+                # 2) собираем raw_levels (экстремумы)
+                # 3) score_levels -> оставляем top
+                # 4) pick_best_two_levels -> (support, resist)
+                return support_level, resistance_level
+```
+
+## 5. Обучение модели
+
+- Формируется df_big (из дневных df по разным символам), добавляются колонки symbol_id.
+- `MultiSymbolDataset`:
+        - Разбивает временной ряд на (seq_len,1) вход, + symbol_id, → предсказываем close.
+        - train/test split (или random_split).
+- `MultiSymbolLSTM` (LSTM вход = concat(close, embedding(symbol))) → FC.
+- `train_model_multi`:
+        - Optim=Adam, Loss=MSE, num_epochs=150 (к примеру).
+
+Лог показывает уменьшение MSE:
+
+```plaintext
+[Epoch 1/150] Train MSE=0.07, Val=0.08
+...
+[Epoch 150/150] Train MSE=0.0003, Val=0.0001
+[Test] MSE=0.0001
+```
+
+Значит, модель фактически «очень хорошо» предсказала close на историческом отрезке (с учётом нормировки, etc.).
+
+## 6. Вывод графиков
+
+В конце `main.py` для каждого символа:
+
+- Берётся 1h df,
+- Plotly Candlestick:
+
+```python
+go.Candlestick(
+         x=df_1h.index,
+         open=df_1h["open"],
+         high=df_1h["high"],
+         low= df_1h["low"],
+         close=df_1h["close"],
+)
+```
+
+- Добавляются `fig.add_hline(y=d_sup,...)` и `fig.add_hline(y=d_res,...)`.
+- Если df_1h имеет уникальный datetime (и не пустой), появится нормальный свечной график.
+
+## 7. Типовые проблемы
+
+- invalid literal for int(): '...some float...'
+
+        Решается тем, что мы правильно парсим `openTime= rec[0]`, а не `rec[1]`.
+
+- last_ts не растёт => break
+
+        Bybit API ограничивает глубину или возвращает однообразные timestamps.
+
+- Model MSE очень маленькое (0.0001)
+
+        Это нормально на нормированных данных. Проверять реальную ошибку в долларах, возможно `~$1-2$`.
+
+- Plotly рисует не свечи, а «столбики»
+
+        Убедитесь, что `df.index` — DatetimeIndex без дублей, `go.Candlestick` + `x= df.index`.
+
+## 8. Резюме
+
+Таким образом, pricelevel-ml позволяет:
+
+- Инкрементально скачать OHLCV с Bybit v5, (поддержка spot/linear).
+- Найти 2 ключевых уровня (поддержка, сопротивление) на дневном TF, опционально уточнить 1h.
+- Обучить простую LSTM-модель на собранных данных (дневных).
+- Построить интерактивные графики (4h или 1h), отметив уровни.
+
+При запуске `python -m src.main` в консоли вы увидите логи загрузки, обучения и появятся интерактивные окна Plotly.
