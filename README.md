@@ -134,7 +134,7 @@ python -m src.main
 
 ## 3. Пояснения к загрузке данных
 
-#### _fetch_bybit_kline_full
+### _fetch_bybit_kline_full
 
 - Делает `session.get_kline(category=..., symbol=..., interval=..., start=..., end=..., limit=...)`.
 - Парсит ответ, где list содержит массив шести полей: [openTime, open, high, low, close, volume], актуально для spot и linear.
@@ -210,19 +210,17 @@ go.Candlestick(
 
 - invalid literal for int(): '...some float...'
 
-        Решается тем, что мы правильно парсим `openTime= rec[0]`, а не `rec[1]`.
-
 - last_ts не растёт => break
 
-        Bybit API ограничивает глубину или возвращает однообразные timestamps.
+Bybit API ограничивает глубину или возвращает однообразные timestamps.
 
 - Model MSE очень маленькое (0.0001)
 
-        Это нормально на нормированных данных. Проверять реальную ошибку в долларах, возможно `~$1-2$`.
+Это нормально на нормированных данных. Проверять реальную ошибку в долларах, возможно:
 
 - Plotly рисует не свечи, а «столбики»
 
-        Убедитесь, что `df.index` — DatetimeIndex без дублей, `go.Candlestick` + `x= df.index`.
+Убедитесь, что `df.index` — DatetimeIndex без дублей, `go.Candlestick` + `x= df.index`.
 
 ## 8. Резюме
 
@@ -233,4 +231,4 @@ go.Candlestick(
 - Обучить простую LSTM-модель на собранных данных (дневных).
 - Построить интерактивные графики (4h или 1h), отметив уровни.
 
-При запуске `python -m src.main` в консоли вы увидите логи загрузки, обучения и появятся интерактивные окна Plotly.
+При запуске `python -m src.main` в консоли вы увидите логи загрузки, обучения и появятся интерактивные окна Plotly

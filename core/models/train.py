@@ -1,5 +1,4 @@
-# src/train.py
-
+# core/models/train.py
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -18,18 +17,21 @@ class MultiSymbolLSTM(nn.Module):
     def forward(self, x_seq, sym_id):
         """
         x_seq: (batch, seq_len, 1)
-        sym_id: (batch,)
+        sym_id: (batch,) 
         out => (batch,1)
         """
         b, s, _= x_seq.shape
         emb= self.symbol_emb(sym_id)   # (b, emb_dim)
-        emb_exp= emb.unsqueeze(1).repeat(1, s, 1) # => (b, s, emb_dim)
-        combined= torch.cat((x_seq, emb_exp), dim=2) # (b, s, input_size+emb_dim)
+        emb_exp= emb.unsqueeze(1).repeat(1, s, 1)
+        combined= torch.cat((x_seq, emb_exp), dim=2) 
         out, _= self.lstm(combined)
-        last_out= out[:,-1,:]   # (b, hidden_size)
-        y= self.fc(last_out)    # (b,1)
+        last_out= out[:,-1,:]
+        y= self.fc(last_out)
         return y
 
+def build_new_model(num_symbols=1, device='cpu'):
+    model = MultiSymbolLSTM(num_symbols=num_symbols).to(device)
+    return model
 
 def train_model_multi(train_ds, val_ds,
                       num_symbols,
@@ -37,9 +39,7 @@ def train_model_multi(train_ds, val_ds,
                       learning_rate=0.0003,
                       num_epochs=50,
                       batch_size=64):
-    model= MultiSymbolLSTM(num_symbols,
-                           input_size=1, hidden_size=128, num_layers=2,
-                           output_size=1, emb_dim=8, dropout=0.2).to(device)
+    model= build_new_model(num_symbols=num_symbols, device=device)
     criterion= nn.MSELoss()
     optimizer= torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -52,17 +52,19 @@ def train_model_multi(train_ds, val_ds,
         for x_seq, sym_id, y in train_loader:
             x_seq= x_seq.to(device)
             sym_id= sym_id.to(device)
-            y= y.to(device)               # shape (b,1)
+            y= y.to(device)
+
             optimizer.zero_grad()
-            out= model(x_seq, sym_id)     # (b,1)
+            out= model(x_seq, sym_id)
             loss= criterion(out, y)
             loss.backward()
             optimizer.step()
+
             total_loss += loss.item()* len(y)
             count += len(y)
 
         train_mse= total_loss/count if count>0 else 0
-        val_mse= evaluate_model_multi(model,val_loader,device)
+        val_mse= evaluate_model_multi(model, val_loader, device)
         print(f"[Epoch {epoch+1}/{num_epochs}] Train MSE: {train_mse:.4f}, Val MSE={val_mse:.4f}")
 
     return model
@@ -80,6 +82,6 @@ def evaluate_model_multi(model, data_loader, device='cpu'):
             loss= criterion(out, y)
             total+= loss.item()
             n+= len(y)
-    if n==0: return 0
-    mse= total/n
+
+    mse= total/n if n>0 else 0
     return mse

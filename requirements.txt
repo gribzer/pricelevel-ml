@@ -9,3 +9,5 @@ torchvision
 matplotlib
 plotly
 jupyter
+dotenv
+dash

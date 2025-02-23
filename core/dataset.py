@@ -1,4 +1,4 @@
-# src/dataset.py
+# core/dataset.py
 
 import torch
 import numpy as np
