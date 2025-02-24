@@ -2,147 +2,103 @@
 import os
 import time
 import json
-import threading
+import datetime
 import requests
-from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from flask_socketio import SocketIO
-from websocket import WebSocketApp, WebSocketConnectionClosedException
+from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "ANY_SECRET_HERE"
-socketio = SocketIO(app, cors_allowed_origins="*")
 
-##########################################################
-# Настройка смещения в часах (пример: 3 часа)
-##########################################################
-UTC_OFFSET_HOURS = 3
-LOCAL_OFFSET_SECONDS = UTC_OFFSET_HOURS * 3600
+# К примеру, Bybit mainnet
+BYBIT_BASE_URL = "https://api.bybit.com"
 
-##########################################################
-# WebSocket к Bybit
-##########################################################
-WS_URL_MAINNET = "wss://stream.bybit.com/v5/public"
-WS_URL_TESTNET = "wss://stream-testnet.bybit.com/v5/public"
+# Настройки глубины для разных таймфреймов:
+#  - D  => 6 months
+#  - 4H => 3 months
+#  - 1H => 1 month
+#  - 15M => 1 week
+TIMEFRAME_DEPTH = {
+    "D": 6 * 30 * 24 * 3600,   # ~6 months (180 days)
+    "4H": 3 * 30 * 24 * 3600,  # ~3 months
+    "1H": 30 * 24 * 3600,      # ~1 month
+    "15M": 7 * 24 * 3600,      # ~1 week
+}
 
-ws_app = None
-ws_thread = None
+# Маппинг для Bybit
+# Bybit intervals: "D" or "240" or "60" or "15"
+TIMEFRAME_MAP = {
+    "D": "D",     # Daily
+    "4H": "240",  # 4 hours
+    "1H": "60",   # 1 hour
+    "15M": "15",  # 15 minutes
+}
 
-def on_message(ws, message_str):
-    # Обработка real-time
-    pass
 
-def on_open(ws):
-    print("[Bybit WS] Opened connection")
+@app.route("/")
+def index():
+    return "Server is running. Use /api/history?symbol=BTCUSDT&timeframe=4H"
 
-def on_close(ws, code, msg):
-    print("[Bybit WS] Closed", code, msg)
 
-def on_error(ws, err):
-    print("[Bybit WS] Error:", err)
+@app.route("/api/history", methods=["GET"])
+def api_history():
+    """
+    Пример: /api/history?symbol=BTCUSDT&timeframe=4H
+    Доступные таймфреймы: D, 4H, 1H, 15M
+    """
+    symbol = request.args.get("symbol", "BTCUSDT")
+    timeframe = request.args.get("timeframe", "1H")
+    # Вычислим глубину (сек) на основе таблицы
+    depth_sec = TIMEFRAME_DEPTH.get(timeframe, 7 * 24 * 3600)  # если не найдёт, 1 week
+    # Преобразуем во внутренний формат Bybit
+    bybit_interval = TIMEFRAME_MAP.get(timeframe, "60")  # default 1H
 
-def run_ws_forever():
-    if ws_app:
-        ws_app.run_forever()
+    # Текущее время (ms)
+    end_time = int(time.time() * 1000)
+    start_time = end_time - (depth_sec * 1000)
 
-def init_ws(url):
-    global ws_app, ws_thread
-    ws_app = WebSocketApp(
-        url=url,
-        on_open=on_open,
-        on_message=on_message,
-        on_error=on_error,
-        on_close=on_close
-    )
-    ws_thread = threading.Thread(target=run_ws_forever, daemon=True)
-    ws_thread.start()
-    time.sleep(1)
-
-def subscribe_kline(symbol, interval):
-    global ws_app
-    if ws_app is None:
-        print("[INFO] Trying mainnet:", WS_URL_MAINNET)
-        init_ws(WS_URL_MAINNET)
-
-    sub_msg = {
-        "op": "subscribe",
-        "args": [f"kline.{interval}.{symbol}"]
-    }
-    try:
-        ws_app.send(json.dumps(sub_msg))
-    except Exception as e:
-        print("[ERROR] Subscribing on mainnet, fallback testnet...", e)
-        init_ws(WS_URL_TESTNET)
-        time.sleep(0.5)
-        ws_app.send(json.dumps(sub_msg))
-
-##########################################################
-# Получаем исторические свечи (REST)
-##########################################################
-def fetch_historical_klines(symbol: str, interval: str, limit: int = 10):
-    base_url = "https://api.bybit.com"
-    endpoint = f"{base_url}/v5/market/kline"
-
-    # Вычитаем 3 часа
-    current_time = int((time.time() - LOCAL_OFFSET_SECONDS) * 1000)
-    # 6 месяцев назад
-    six_months_ms = 15552000 * 1000
-    end_time = current_time
-    start_time = end_time - six_months_ms
-
+    # Запрос v5/market/kline
+    # Док: https://bybit-exchange.github.io/docs/v5/market/kline
+    endpoint = f"{BYBIT_BASE_URL}/v5/market/kline"
     params = {
         "category": "linear",
         "symbol": symbol,
-        "interval": interval,
-        "limit": limit,
+        "interval": bybit_interval,
         "start": start_time,
-        "end": end_time
+        "end": end_time,
+        "limit": 1000  # макс 1000 за запрос
     }
     try:
         resp = requests.get(endpoint, params=params, timeout=10)
         data = resp.json()
         if data.get("retCode") != 0:
-            print("[ERROR] retCode:", data)
-            return []
-        kline_list = data["result"].get("list", [])
-        kline_list.sort(key=lambda x: int(x[0]))
+            print("Bybit Kline Error:", data)
+            return jsonify({"candles": [], "error": data}), 400
+
+        kline_list = data["result"]["list"] or []
+        # пример структуры item: [startTime, open, high, low, close, volume, turnover]
+        # Сортируем по startTime
+        kline_list.sort(key=lambda x: x[0])
         results = []
         for item in kline_list:
-            start_ms = int(item[0])
+            st_ms = int(item[0])
             o = float(item[1])
             h = float(item[2])
             l = float(item[3])
             c = float(item[4])
             results.append({
-                "time": start_ms // 1000,
+                "time": st_ms // 1000,  # UNIX timestamp (sec)
                 "open": o,
                 "high": h,
                 "low": l,
                 "close": c
             })
-        return results
+        return jsonify({"candles": results})
     except Exception as e:
-        print("[ERROR] fetch_historical_klines exception:", e)
-        return []
+        print("[ERROR]", e)
+        return jsonify({"candles": [], "error": str(e)}), 500
 
-##########################################################
-# Flask endpoints
-##########################################################
-@app.route("/")
-def index():
-    return "Server is running. Use /api/history?symbol=BTCUSDT&interval=1&limit=10"
-
-@app.route("/api/history", methods=["GET"])
-def api_history():
-    symbol = request.args.get("symbol", "BTCUSDT")
-    interval = request.args.get("interval", "1")
-    limit = min(int(request.args.get("limit", 10)), 1000)
-
-    candles = fetch_historical_klines(symbol, interval, limit)
-    subscribe_kline(symbol, interval)
-    return jsonify({"candles": candles})
 
 if __name__ == "__main__":
-    socketio.run(app, port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

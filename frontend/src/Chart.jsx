@@ -1,27 +1,25 @@
-import { forwardRef, useEffect, useRef, useImperativeHandle } from 'react'
+import React, { forwardRef, useEffect, useRef, useImperativeHandle } from 'react'
 import { createChart } from 'lightweight-charts'
 
-const Chart = forwardRef((props, ref) => {
+const ChartComponent = forwardRef((props, ref) => {
   const containerRef = useRef(null)
   const chartRef = useRef(null)
   const candleSeriesRef = useRef(null)
 
   useEffect(() => {
     const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
+      width: 600,
       height: 400,
-      layout: {
-        backgroundColor: '#fff',
-        textColor: '#000'
-      },
-      grid: {
-        vertLines: { color: '#eee' },
-        horzLines: { color: '#eee' }
-      },
+      layout: { backgroundColor: '#ffffff', textColor: '#000000' },
     })
-    const series = chart.addCandlestickSeries()
+
+    // В v5:
+    // addSeries(<SeriesType>, options?)
+    // SeriesType может быть "Line", "Area", "Bar", "Candlestick", "Baseline", "Histogram"
+    const candleSeries = chart.addSeries('Candlestick')
+    candleSeriesRef.current = candleSeries
+
     chartRef.current = chart
-    candleSeriesRef.current = series
 
     return () => {
       chart.remove()
@@ -39,10 +37,10 @@ const Chart = forwardRef((props, ref) => {
   return (
     <div
       ref={containerRef}
-      style={{ width: '800px', height: '400px', border: '1px solid #ccc' }}
+      style={{ width: '600px', height: '400px', border: '1px solid #ccc' }}
     />
   )
 })
 
-Chart.displayName = 'Chart'
-export default Chart
+ChartComponent.displayName = 'ChartComponent'
+export default ChartComponent

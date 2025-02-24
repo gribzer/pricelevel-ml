@@ -1,10 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>React + Bybit</title>
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Test LW Charts 5.x</title>
+  <!-- Обратите внимание: 5.x -->
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5.0.2/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div id="chart" style="width: 600px; height: 300px;"></div>
+
+  <script>
+    console.log("LightweightCharts =", window.LightweightCharts);
+
+    // Создаём чарт
+    const chartContainer = document.getElementById('chart');
+    const chart = LightweightCharts.createChart(chartContainer, {
+      width: 600,
+      height: 300,
+      layout: { backgroundColor: '#ffffff', textColor: '#000' },
+    });
+
+    console.log("chart =", chart);
+
+    // В 5.x: addSeries('Candlestick', options?)
+    // Если будет опечатка, упадёт assertion
+    const candleSeries = chart.addSeries('Candlestick');
+    candleSeries.setData([
+      { time: '2023-01-01', open: 100, high: 105, low: 95, close: 102 },
+      { time: '2023-01-02', open: 102, high: 110, low: 101, close: 108 },
+    ]);
+  </script>
+</body>
 </html>

@@ -1,49 +1,53 @@
-import { useRef, useState } from 'react'
-import Chart from './Chart'
+import React, { useState, useRef } from 'react'
+import ChartComponent from './Chart'
 
 function App() {
   const [symbol, setSymbol] = useState('BTCUSDT')
-  const [interval, setInterval] = useState('1')
-  const [limit, setLimit] = useState('10')
+  const [timeframe, setTimeframe] = useState('1H') // "D","4H","1H","15M"
   const chartRef = useRef(null)
 
-  const loadData = async () => {
-    const url = `http://127.0.0.1:5000/api/history?symbol=${symbol}&interval=${interval}&limit=${limit}`
+  // Наборы для <select>
+  const symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT"]
+  const timeframes = ["D", "4H", "1H", "15M"]
+
+  const handleLoad = async () => {
     try {
+      // Просто делаем fetch на /api/history (через Vite proxy)
+      // /api/history?symbol=BTCUSDT&timeframe=4H
+      const url = `/api/history?symbol=${symbol}&timeframe=${timeframe}`
       const resp = await fetch(url)
       const data = await resp.json()
-      if (data.candles && chartRef.current) {
-        chartRef.current.setData(data.candles)
+      if (!data.candles) {
+        console.error("No candles in response", data)
+        return
       }
+      // chartRef.current -> ChartComponent
+      chartRef.current.setData(data.candles)
     } catch (err) {
-      console.error("Error fetching data:", err)
+      console.error("Error loading", err)
     }
   }
 
   return (
     <div style={{ padding: '20px' }}>
-      <h1>Bybit Chart</h1>
+      <h1>Bybit Candles (no realtime)</h1>
       <div style={{ display: 'flex', gap: '10px' }}>
-        <select value={symbol} onChange={e => setSymbol(e.target.value)}>
-          <option value="BTCUSDT">BTCUSDT</option>
-          <option value="ETHUSDT">ETHUSDT</option>
-        </select>
-        <select value={interval} onChange={e => setInterval(e.target.value)}>
-          <option value="1">1m</option>
-          <option value="15">15m</option>
-          <option value="60">1h</option>
-        </select>
-        <input
-          type="number"
-          min="1"
-          max="1000"
-          value={limit}
-          onChange={e => setLimit(e.target.value)}
-        />
-        <button onClick={loadData}>Load</button>
+        <div>
+          Symbol:
+          <select value={symbol} onChange={e => setSymbol(e.target.value)}>
+            {symbols.map(sym => <option key={sym} value={sym}>{sym}</option>)}
+          </select>
+        </div>
+        <div>
+          Timeframe:
+          <select value={timeframe} onChange={e => setTimeframe(e.target.value)}>
+            {timeframes.map(tf => <option key={tf} value={tf}>{tf}</option>)}
+          </select>
+        </div>
+        <button onClick={handleLoad}>Load</button>
       </div>
 
-      <Chart ref={chartRef} />
+      <ChartComponent ref={chartRef} />
     </div>
   )
 }
