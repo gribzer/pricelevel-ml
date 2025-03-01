@@ -18,50 +18,37 @@
 
 ```bash
 pricelevel-ml/
-├── run.py                   # (опционально) общий entry point
 ├── backend/
-│   ├── server.py            # Flask + SocketIO WebSocket server
-│   ├── __init__.py
-│   └── ...
-├── core/
-│   ├── __init__.py
-│   ├── config.py            # Все ключи, настройки
-│   ├── data_fetcher/        # Модули для историч. скачивания (REST)
+│   ├── core/
+│   │   ├── analysis/
+│   │   ├── data_fetcher/    # REST clients for historical data
+│   │   │   ├── bybit.py
+│   │   │   ├── bingx.py
+│   │   │   └── htx.py
+│   │   ├── models/          # ML models and training
+│   │   │   └── train.py
+│   │   ├── pipeline/        # Processing pipelines
+│   │   │   ├── main_pipeline.py
+│   │   │   └── realtime_model.py
+│   │   ├── ws_clients/      # WebSocket clients for real-time data
+│   │   │   ├── aggregator.py
+│   │   │   ├── bybit_ws.py
+│   │   │   ├── bingx_ws.py
+│   │   │   └── htx_ws.py
 │   │   ├── __init__.py
-│   │   ├── bybit.py
-│   │   ├── bingx.py
-│   │   ├── htx.py
-│   │   └── ...
-│   ├── ws_clients/          # Модули для реального потока (WS)
-│   │   ├── __init__.py
-│   │   ├── aggregator.py    # CandleAggregator
-│   │   ├── bybit_ws.py
-│   │   ├── bingx_ws.py
-│   │   ├── htx_ws.py
-│   │   └── ...
-│   ├── models/              # Логика обучения, модели
-│   │   ├── __init__.py
-│   │   ├── train.py
-│   │   └── ...
-│   ├── pipeline/
-│   │   ├── __init__.py
-│   │   ├── main_pipeline.py
-│   │   └── realtime_model.py
-│   └── ...
-├── webapp/
-│   ├── dash_app/
-│   │   ├── app.py           # Dash-приложение (аналитика)
-│   ├── tradingview/         # Фронт c lightweight-charts
-│   │   ├── index.html
-│   │   └── app.js           # JS-код (подключ. к SocketIO)
-│   ├── chartjs/             # (опцион.) Пример с chart.js
-│   └── ...
-├── data/
-│   ├── raw/                 # csv-файлы с сырьём
-│   └── processed/
-├── requirements.txt
-├── README.md                # Настоящий файл документации
-└── ...
+│   │   ├── config.py        # Configuration and credentials
+│   │   ├── liquidity_levels.py  # Price level detection
+│   │   └── incremental_fetcher.py
+│   ├── mlruns/              # MLflow experiment tracking
+│   ├── notebooks/           # Jupyter notebooks
+│   └── server.py            # Flask + SocketIO server
+├── frontend/                # Web interface
+│   ├── public/
+│   ├── src/
+│   ├── index.html           # Main application entry point
+│   └── vite.config.js
+├── DOCS.md                  # Extended documentation
+└── README.md                # This file
 ```
 
 **Ключевые** элементы:
